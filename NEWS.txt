@@ -1,3 +1,139 @@
+bits-2003
+=========
+
+Track all BITS dependencies (GRUB2, Python, ACPICA, libffi, and fdlibm)
+as git submodules, rather than as separate tarballs to unpack.  Split
+all BITS-specific changes to these dependencies as commits in those git
+repositories, making them easier to track, update, and upstream.
+Submodules also ensure that each commit to BITS has a matching version
+of all dependencies that it builds with, and that changes to BITS and
+corresponding changes to dependencies are committed atomically.
+
+BITS releases now provide a single source tarball containing both the
+BITS source and the dependencies under the deps directory.  This avoids
+the need to unpack multiple source tarballs to specific locations before
+building.
+
+New features:
+
+- Add support to decode and execute ACPI error injection (APEI, EINJ)
+
+- Add explore option to decode and display variable MTRRs
+
+- smilatency: Add a new function to time explicitly invoked SMIs
+
+  The new smilatency.time_io_smi function explicitly invokes SMIs by
+  writing to an IO port (by default, port 0xb2), and times the duration
+  of those SMIs. The port, the byte written, and the number of SMIs to
+  average can all be changed via optional parameters.
+
+- Update Python to a post-2.7.10 snapshot that supports --with-computed-gotos.
+  This improves the performance of the Python interpreter.
+
+- python: Support the glob, optparse, pickle, profile, pstats, and
+  unicodedata modules
+
+- Provide a bits.rdtsc() function to directly invoke the rdtsc
+  instruction.  Previously, Python code used rdmsr on MSR 0x10.
+
+- Update to ACPICA 20150717
+
+- acpi: Add summary before SRAT table decode
+
+- efi: Add SMBIOS3_TABLE_GUID
+
+Bugfixes and cleanups:
+
+- Makefile: Fix build on systems that change configure's default libdir
+
+  The invocation of configure for grub did not specify --libdir, and
+  assumed that it would end up as the default $(prefix)/lib. However,
+  some distributions set a different systemwide default libdir (such as
+  /lib64) in a way that affects the default for configured software. On
+  such systems, the build would fail because it could not find files in
+  GRUB's libdir.  To avoid that, explicitly specify --libdir.
+
+- Makefile: When computing build version information, only use our own git
+  repository
+
+  If we don't have a .git directory, avoid searching upwards for a git
+  repository.  Otherwise, builds from beneath some other unrelated git
+  repository would pick up a version number from there.
+
+- Don't hardcode a specific mwait hint value in pstate tests or
+  cpu_frequency
+
+  bits.cpu_frequency hardcoded an mwait hint of 0x20, and set that
+  unconditionally, without restoring the original hint afterward.
+  pstate.test_hardware_pstates and testacpi.test_pstates also hardcoded
+  0x20, and each had identical code to save and restore the original
+  hints.
+
+  Stop setting a hint in cpu_frequency; it now measures based on the
+  current state only.  Factor out the duplicate save/restore code into a
+  new context manager bits.mwait.use_hint, and add a mechanism for CPUs
+  to quirk the default hint to something other than 0x20.
+
+- bits.cpu_frequency: Stop assuming that APERF and MPERF use TSC
+  frequency
+
+  APERF and MPERF are only guaranteed to be proportional; MPERF need not
+  actually match TSC.  Read and use the TSC delta separately to scale
+  the APERF/MPERF ratio.
+
+- Avoid calling bits.cpu_frequency twice when checking for availability.
+  This speeds up the CPU frequency test.
+
+- bitfields.setbits: Fix bug referencing a name from the same module
+
+- topology.display: Let ttypager.page() catch and display exceptions.
+
+- smilatency: Factor out the computation of TSCs per second as a helper.
+
+  The new bits.tsc_per_sec() function computes the number of TSC counts
+  per second; after the first call, it just returns the cached value.
+
+  The new bits.format_tsc() function formats a number of TSC counts as a
+  time string with units.
+
+- cstate_residency: Use the new bits.mwait.use_hint helper.
+
+  This factors out common code, and ensures that the hint is restored
+  after the test.
+
+- python: Fix time.localtime to accept float arguments
+
+- python: Make our file-like objects, used for stdout/stderr streams,
+  support .flush()
+
+- Move some bits-specific modules into the bits.* module namespace
+
+  This avoids possible conflicts between bits modules and standard
+  Python modules.
+
+- Work around ACPICA bug: skip over initial NULLs from
+  AcpiGetTableByIndex below index 3
+
+  ACPICA started reserving index slots for 32-bit and 64-bit FACS, and
+  returning NULL for those that don't exist, with other tables starting
+  at index 3.  This breaks the previous API that allowed enumerating
+  tables until the first NULL is returned.  Work around that by always
+  grabbing the first 3 (filtering NULL), and then starting the
+  enumeration-until-NULL from 3 rather than 0.
+
+- acpi: Rename duplicate field in SRATMemoryAffinity
+
+- acpi: get_cpupaths: Fix handling of x2apic CPUs (with _UID)
+
+- acpi: Fix FACS parsing to return the parsed structure
+
+- cpudetect: Replace hardcoded list of CPU names with detection of
+  available CPU modules
+
+- Move errno compatibility changes from pyconfig.h to errno.h.  This
+  allows them to support fdlibm as well, which eliminates one of our
+  changes to fdlibm.
+
 bits-1219
 =========
 
