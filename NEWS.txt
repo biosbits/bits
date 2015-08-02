@@ -1,3 +1,8 @@
+bits-2005
+=========
+
+- Makefile: Fix version calculation when not building from git
+
 bits-2003
 =========
 
