@@ -98,8 +98,8 @@ Burt Triplett <burt@pbjtriplett.org>
 Josh Triplett <josh@joshtriplett.org>
 
 Based on:
-GNU GRUB2 - http://www.gnu.org/software/grub/
-Python - http://python.org/
+GNU GRUB2 - https://www.gnu.org/software/grub/
+Python - https://www.python.org/
 ACPICA - https://acpica.org/
 fdlibm - http://www.netlib.org/fdlibm/
 

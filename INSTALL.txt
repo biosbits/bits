@@ -74,7 +74,7 @@ to construct a new BITS USB disk, read on.
 Make sure you know the correct device name for your USB disk, so you don't
 write to your system's hard disk instead.
 
-Go get syslinux from <http://www.kernel.org/pub/linux/utils/boot/syslinux/>, or
+Go get syslinux from <https://www.kernel.org/pub/linux/utils/boot/syslinux/>, or
 install the package provided by your Linux distribution; download the latest
 version and extract it somewhere you can find from the command line.  The
 syslinux distribution includes binaries for various platforms, including Linux,

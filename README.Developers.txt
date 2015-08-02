@@ -118,7 +118,7 @@ C code in BITS follows the K&R coding style, with four space indents, and no
 tabs.
 
 Python code in BITS should follow PEP 8
-(http://www.python.org/dev/peps/pep-0008/), the Style Guide for Python Code,
+(https://www.python.org/dev/peps/pep-0008/), the Style Guide for Python Code,
 which also specifies four-space indents.
 
 Don't try to wrap lines to fit an arbitrary line width, but do wrap lines when

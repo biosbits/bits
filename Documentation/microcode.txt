@@ -9,7 +9,7 @@ arguments.
 
 To load microcode, or compare your current microcode version to available
 microcodes, you need a microcode data file.  You can get one from
-http://downloadcenter.intel.com/ , under "Processors".  You can then run
+https://downloadcenter.intel.com/ , under "Processors".  You can then run
 mcu_status with that file to check for a newer microcode, or run mcu_load
 with that file to load it.
 
