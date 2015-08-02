@@ -31,9 +31,13 @@ GNUMAKEFLAGS:=--output-sync=line
 
 BITS:=$(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
-buildid:=$(shell cd '$(BITS)' && if test -d .git ; then git rev-parse HEAD 2>/dev/null ; else echo 'Unknown - not built from repository' ; fi)
-gitbuildnum:=$(shell cd '$(BITS)' && if test -d .git ; then git rev-list HEAD 2>/dev/null | wc -l ; else echo snapshot ; fi)
+buildid:=$(shell cd '$(BITS)' && (GIT_CEILING_DIRECTORIES='$(BITS)' git rev-parse HEAD 2>/dev/null || echo 'Unknown - not built from repository'))
+gitbuildnum:=$(shell cd '$(BITS)' && (GIT_CEILING_DIRECTORIES='$(BITS)' git rev-list HEAD 2>/dev/null | wc -l) )
+ifeq ($(gitbuildnum),0)
+buildnum:=snapshot
+else
 buildnum:=$(shell expr 2000 + '$(gitbuildnum)')
+endif
 
 ifeq ($(V),0)
 Q:=@
