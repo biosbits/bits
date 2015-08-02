@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# This script produces vaguely sane indentation, but files still need manual review and correction afterward.
+# Do not re-run this script on existing files to "fix" indentation; just try to match the existing style.
+# OK to run as a first pass on new files to make them match, but remember to fix up the result for sanity.
+
+# K&R style, four space indent (default), no tabs, don't try to wrap lines automatically, don't align comments
+# Without -ts0, indent will still align comments to the next tabstop.
+exec indent --ignore-profile -kr --no-tabs -ts0 -l0 -c0 -cd0 -cp0 --no-space-after-casts "$@"

@@ -1,0 +1,6 @@
+bits-*.zip
+bits-*.iso
+local-files
+*.mk
+.*.swp
+build

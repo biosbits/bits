@@ -1,0 +1,139 @@
+                     BIOS Implementation Test Suite (BITS)
+
+This file contains installation instructions only.  See boot/README.txt for
+documentation on using BITS.
+
+For more information about BITS, including the latest version and the source
+code, see the BITS homepage at http://biosbits.org/
+
+To boot BITS, you need to create a bootable BITS disk.  You can construct this
+disk in one of two ways, depending on how you want to use the resulting disk:
+
+- This distribution includes a pre-built .iso image, which you can burn to a CD
+  or image onto a USB disk to produce a bootable BITS disk.  This option lets
+  you create bootable BITS media more quickly and easily, but does not allow
+  you to modify the disk after creating it.  For more information, refer to the
+  section "Using the pre-constructed read-only BITS disk image".
+
+- If you want to add or edit files in the BITS distribution, upgrade your
+  disk to subsequent versions of BITS more easily, or use a USB disk to store
+  data other than BITS, then you can use the "boot" and optionally "efi"
+  directories in this distribution to construct a bootable USB disk which
+  supports subsequent modification.  For this procedure, refer to the section
+  "Constructing a bootable BITS USB disk supporting subsequent modification".
+
+
+Using the pre-constructed read-only BITS disk image
+===================================================
+
+This distribution includes a pre-built .iso image.  You can burn this image onto
+a CD using any standard CD burning software for your platform.  Please note that
+you need to burn the .iso as an image; you should end up with a CD containing
+directories named "boot" and "efi", not a CD containing the .iso file.
+
+Thanks to deep magic provided by GRUB, the same .iso file also works as a
+bootable USB disk image.  If you image the .iso file directly to a USB disk (the
+whole disk, not a partition), you'll end up with a bootable USB disk.  On Linux,
+try "dd if=bits-NNN.iso of=/dev/sdX"; replace bits-NNN.iso with the versioned
+BITS iso, and sdX with your disk device, and remember to umount it first.  On
+Windows, you might try "dd for Windows".  In both cases, make sure you refer to
+the correct disk device for your USB disk, not your system's hard disk.  Note
+that this procedure will overwrite any data on your USB disk.  Also note that
+this constructs a USB disk containing an ISO9660 filesystem as a partition,
+which operating systems do not normally expect to see; you might have some
+trouble reading it from within your OS, and you definitely cannot write to it.
+
+If you want to try out BITS within a virtual machine, you can tell your VM to
+use the .iso file either as a disk image or a CD image.  For KVM, you can run
+"kvm -cdrom bits-NNN.iso" to boot BITS via CD.  Note that most hardware-specific
+tests will not run in a virtual machine, but some of the general tests will
+work.  If you find out interesting things about either BITS or your VM in the
+process, we'd love to hear about it.
+
+
+Constructing a bootable BITS USB disk supporting subsequent modification
+========================================================================
+
+This procedure creates a bootable USB disk.  You will need a USB disk with a
+reasonable amount of space (enough to hold the boot directory present in this
+distribution, plus a little slack space).  Your USB disk should have a FAT32
+partition.
+
+If your USB disk contains any data that you care about, back it up now.  No
+really.  There will be a test later.
+
+Note that if you have previously followed this procedure to create a bootable
+BITS USB disk, you can upgrade to a new version of BITS by deleting the "boot"
+directory from the root of the USB disk and copying the "boot" directory from
+this BITS .zip distribution to the root of the USB disk.  You must delete the
+old directory first; copying the new directory over the old will not remove
+obsolete files, and will thus break in subtle ways.  If this procedure works for
+you, you don't need to follow the remaining steps in this section; if you need
+to construct a new BITS USB disk, read on.
+
+Make sure you know the correct device name for your USB disk, so you don't
+write to your system's hard disk instead.
+
+Go get syslinux from <http://www.kernel.org/pub/linux/utils/boot/syslinux/>, or
+install the package provided by your Linux distribution; download the latest
+version and extract it somewhere you can find from the command line.  The
+syslinux distribution includes binaries for various platforms, including Linux,
+Windows, and DOS.
+
+The remaining instructions will require a command prompt; open one, and cd to
+this directory (containing this INSTALL.txt file and the boot directory).
+Under Windows, when the commands below refer to a program, you will need to
+give the path to the executable, wherever you extracted it.
+
+To build a bootable USB disk, you will need a USB disk with a FAT32 partition.
+A partitionless USB disk with no partition table and a FAT32 filesystem
+directly on the disk, sometimes called a "superfloppy", will *not* work.  If
+you have such a disk, you must partition it so that it has a partition table
+and a FAT32 partition.  For Linux, try gparted.  For Windows, the "HP USB disk
+storage format tool" can do this; you can find that tool at
+<http://downloads.pcworld.com/pub/new/utilities/peripherals/SP27608.exe>.  Run
+it, choose your USB disk (the tool should not let you choose your system hard
+disk), and choose "FAT32".  The volume label does not matter.  Do not check
+"Create a DOS startup disk"; this procedure will make the disk bootable, but it
+will boot something *much* more awesome than DOS.
+
+Now, copy the "boot" and "efi" directories to the root of that drive.
+
+For Windows, run:
+xcopy /s boot u:\boot\
+xcopy /s efi u:\efi\
+Change "u:" to the drive letter of your USB disk.
+
+For Linux, run:
+cp -r boot efi /media/disk/
+Change /media/disk to the mount point of your USB disk.
+
+Now, you need to make the disk bootable with syslinux.
+
+For Windows, run:
+syslinux.exe -m -a u:
+Change "syslinux.exe" to the path to the syslinux executable for your platform,
+and "u:" to the drive letter of your USB disk
+
+For Linux, run:
+syslinux /dev/sdb1
+Change "/dev/sdb1" to the device name of the partition on your USB disk.  Take
+care not to syslinux your system hard disk.  You will also need to set the boot
+flag on the partition containing BITS; gparted can do that.  Finally, you need
+to install an MBR that will boot the bootable partition; the syslinux package
+includes an "mbr.bin" which will work.  To install that MBR to the USB disk,
+run: cat /usr/lib/syslinux/mbr.bin > /dev/sdb
+Change /dev/sdb to the device name of your USB disk,  Note that your syslinux
+distribution may install mbr.bin somewhere else.
+
+The resulting disk will boot via USB on systems booting via MBR or via the
+compatibility support module (CSM) of an EFI BIOS.  It will also boot
+natively on many 32-bit and 64-bit EFI BIOSes; however, some EFI BIOSes may
+require the partition containing the "efi" directory to have partition type
+0xef rather than one of the usual FAT32 types such as 0x0c.  If you have such
+an EFI BIOS, you may need to change the type of the partition to 0xef before
+your BIOS will boot from it; note that this will also prevent Windows from
+assigning a drive letter to that partition by default.
+
+See README.txt in the boot directory of the newly created bootable disk for
+more information on BITS.

@@ -1,0 +1,72 @@
+#!/bin/sh
+
+# Copyright (c) 2011, Intel Corporation
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    * Redistributions of source code must retain the above copyright notice,
+#      this list of conditions and the following disclaimer.
+#    * Redistributions in binary form must reproduce the above copyright notice,
+#      this list of conditions and the following disclaimer in the documentation
+#      and/or other materials provided with the distribution.
+#    * Neither the name of Intel Corporation nor the names of its contributors
+#      may be used to endorse or promote products derived from this software
+#      without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+# ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+set -e
+
+workdir="$(mktemp -d)"
+trap "rm -rf $workdir" 0
+
+export BITS="$(cd "$(dirname "$0")" && pwd)"
+disk=sdb
+partition=/dev/${disk}1
+mountpoint=$workdir/mnt
+
+distzip=$BITS/bits-latest.zip
+if [ $# -gt 1 ] ; then
+    echo "Usage: mkdisk [bits-NNN.zip]" 1>&2
+    exit 1
+elif [ $# -eq 1 ] ; then
+    distzip="$1"
+fi
+
+if ! [ -f "$distzip" ] ; then
+    echo "Distribution zip file \"$distzip\" not found" 1>&2
+    exit 1
+fi
+
+# Only write to a removable disk, as an extra safety check
+removable="$(cat /sys/block/$disk/removable 2>/dev/null || echo 0)"
+if [ "$removable" -ne 1 ] ; then
+    echo "Refusing to write to a non-removable disk; please edit mkdisk" 1>&2
+    exit 1
+fi
+
+# unmount if currently mounted
+if mount | grep -q "^$partition\>" ; then
+    sudo umount $partition
+fi
+mkdir $mountpoint
+sudo mount $partition $mountpoint
+trap "sudo umount $partition && rm -rf $workdir" 0
+
+unzip "$distzip" -d $workdir/
+sudo cp -dr $workdir/bits-*/boot $workdir/bits-*/efi $mountpoint/
+
+if [ -d $BITS/local-files ] ; then
+    sudo cp -dr $BITS/local-files/* $mountpoint/
+fi

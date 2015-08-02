@@ -1,0 +1,18 @@
+#ifndef ERRNO_H
+#define ERRNO_H
+
+#include <grub/err.h>
+
+#define errno grub_errno
+
+#define EDOM GRUB_ERR_BAD_ARGUMENT
+#define EINVAL GRUB_ERR_BAD_NUMBER
+#define EISDIR GRUB_ERR_BAD_FILE_TYPE
+#define ENOENT GRUB_ERR_FILE_NOT_FOUND
+#define ENOMEM GRUB_ERR_OUT_OF_MEMORY
+#define ENOTDIR GRUB_ERR_BAD_FILE_TYPE
+#define ENXIO GRUB_ERR_UNKNOWN_DEVICE
+#define ERANGE GRUB_ERR_OUT_OF_RANGE
+#define EINTR GRUB_ERR_TIMEOUT
+
+#endif /* ERRNO_H */

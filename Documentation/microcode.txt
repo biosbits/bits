@@ -1,0 +1,30 @@
+Loading and checking processor microcode
+
+BITS can load processor microcode for you, or check your current microcode
+version and compare it to available microcodes.  You can find these options
+under the Configure menu.
+
+To check your current microcode version, you can run mcu_status with no
+arguments.
+
+To load microcode, or compare your current microcode version to available
+microcodes, you need a microcode data file.  You can get one from
+http://downloadcenter.intel.com/ , under "Processors".  You can then run
+mcu_status with that file to check for a newer microcode, or run mcu_load
+with that file to load it.
+
+mcu_status and mcu_load can also take one or more directories as well as
+files; given a directory, they will attempt to load *every* file in the
+directory as a microcode database.  (They will not recurse into
+subdirectories, however.)  The menu options for checking and loading
+microcode default to checking /boot/mcu.first and /boot/mcu, in that order.
+If you download a microcode data file, you can put it in /boot/mcu and the
+menu options will find it.  /boot/mcu.first exists in case you have a
+processor-specific microcode you want to load instead of one from the full
+standard microcode database.
+
+mcu_status and mcu_load support both binary microcode files and text-based
+microcode files.  Note, though, that any file other than a microcode database
+will probably get parsed as one anyway, with unhelpful (though not dangerous)
+results; in particular, don't give mcu_status or mcu_load a directory
+containing any files other than a microcode database.

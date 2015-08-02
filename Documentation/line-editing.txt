@@ -1,0 +1,77 @@
+Python line-editing keybindings
+
+The Python interactive interpreter (launched via the "python" command)
+supports line editing via a custom readline implementation written in Python,
+in python/readline.py.  It aims to support the most common keybindings and
+functionality provided by GRUB's line editing and by readline on a standard
+Linux system.  By design, it does not support the full configurability of
+readline.  However, if you find a feature missing that your fingers rely on,
+feel free to report it.
+
+All printable characters insert themselves; other keys work as follows:
+
+Enter:
+Submit the line, from anywhere on the line.
+
+Delete:
+Delete the character to the right of the cursor.
+
+Backspace or Ctrl-H:
+Delete the character to the left of the cursor.
+
+Tab or Ctrl-I:
+Tab-completion, attempt to complete the property name to the left of the
+cursor, as a property of the expression further to the left of the cursor.
+Note that this will evaluate part of the current command line as part of
+completion.
+
+Home or Ctrl-A:
+Move cursor to the beginning of the line.
+
+End or Ctrl-E:
+Move cursor to the end of the line.
+
+Left or Ctrl-B:
+Move cursor left by one character.
+
+Right or Ctrl-F:
+Move cursor right by one character.
+
+Up or Ctrl-P:
+Show the previous line in history.
+
+Down or Ctrl-N:
+Show the next line in history.
+
+Ctrl-D:
+On an empty line, acts as end of file.  At the main Python prompt, this will
+exit the interactive interpreter.
+
+Ctrl-K:
+Delete ("Kill") from the cursor to the end of the line.
+
+Ctrl-L:
+Clear the screen.
+
+Ctrl-O:
+Submit the line, and at the next prompt, load the next line from history.
+This makes it easy to re-run multi-line commands.  Note that since the Python
+interactive interpreter requires a blank line after a multi-line block, the
+history will remember blank lines (though not multiple consecutive blank
+lines).
+
+Ctrl-U:
+Delete from the cursor to the beginning of the line.
+
+Ctrl-W:
+Delete the previous word.
+
+Ctrl-Z:
+On an empty line, acts as end of file.  At the main Python prompt, this will
+exit the interactive interpreter.  For compatibility with Windows-trained
+fingers.
+
+Escape:
+On an empty line, acts as end of file.  At the main Python prompt, this will
+exit the interactive interpreter.  For compatibility with systems that don't
+support inputting Ctrl-D or other Ctrl-characters.

@@ -1,0 +1,20 @@
+[submodule "deps/acpica"]
+	path = deps/acpica
+	url = ../acpica
+	fetchRecurseSubmodules = true
+[submodule "deps/fdlibm"]
+	path = deps/fdlibm
+	url = ../fdlibm
+	fetchRecurseSubmodules = true
+[submodule "deps/grub"]
+	path = deps/grub
+	url = ../grub
+	fetchRecurseSubmodules = true
+[submodule "deps/libffi"]
+	path = deps/libffi
+	url = ../libffi
+	fetchRecurseSubmodules = true
+[submodule "deps/python"]
+	path = deps/python
+	url = ../python
+	fetchRecurseSubmodules = true

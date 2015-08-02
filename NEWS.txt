@@ -1,0 +1,2570 @@
+bits-1219
+=========
+
+BITS now builds via a Makefile rather than a shell script.  This allows
+the build to run in parallel, significantly speeding up builds.
+
+Note that unlike the build script, which autodetected the number of CPUs
+to build on, the Makefile uses the usual -j option to make.  So, if
+you're used to ./build autodetecting your CPUs, you'll want to use make
+-j$(nproc) (or just directly specify your desired amount of parallelism,
+as you do with other makefiles).
+
+Use make V=1 to let make echo commands before it runs them.
+
+Use make LOCAL=1 to include local-files in the build (formerly ./build
+local).
+
+BITS now builds within a "build" subdirectory of the source rather than
+a temporary directory under /tmp.  The build system no longer removes
+this directory as part of the build, only via an explicit "make clean",
+to make it easier to investigate the build results.
+
+Note that despite building via Make, BITS does *not* attempt to support
+incremental builds.  We continue to recommend ccache to speed up rebuilds.
+
+Notable new features:
+
+- Add a menu entry to exit back to EFI.
+
+- Show on the main menu how BITS was booted: 32-bit BIOS, 32-bit EFI, or
+  64-bit EFI.
+
+- Support reading and writing control registers.
+
+  bits.read_cr(apicid, n) reads CRn.
+
+  bits.write_cr(apicid, n, value) writes value to CRn.
+
+  Both functions return None on GPF.
+
+Various improvements to the pager:
+
+- When showing output from Python code via the pager, capture tracebacks
+  and display those via the pager as well, so that they wait for input.
+  Previously, if an exception occurred, it would flash on the screen
+  briefly before returning directly to the menu, requiring a trip to the
+  log to view the traceback.
+
+  Also display the output produced before the exception.
+
+- Don't suggest going up when at the top of the output.
+
+- Mention Up as well as PgUp.
+
+- Clean up and simplify logic for EFI file handling and for displaying
+  available options.
+
+Migrate quite a bit of code from C to Python:
+
+- efi: Remove efi.call and the underlying _efi methods supporting it
+
+  Now that we can call EFI functions via ctypes, we don't need efi.call
+  anymore.
+
+- Remove bits.malloc and bits.memmove, now unused with the move to ctypes
+
+- acpi: Use ctypes to call most ACPICA functions from Python, rather
+  than wrapping them via the Python C API.
+
+  This allows replacing several C functions with simpler Python
+  equivalents.
+
+  Because the 32-bit BIOS port uses a calling convention unsupported by
+  libffi, introduce various trivial C wrappers that re-export ACPICA
+  functions with the standard C calling convention.  For
+  AcpiWalkNamespace, introduce a more detailed wrapper that handles
+  callbacks back into Python-provided functions.
+
+  Export acpica_init to Python as well, and call it before calling the
+  ACPICA functions.
+
+- acpi: Move unsafe_io handling from C to Python.
+
+  Directly export the address of the variable and manipulate it using
+  ctypes.
+
+- acpi: Add acpi.install_interface, wrapping AcpiInstallInterface, for
+  use in the ACPI OS features menu.
+
+- acpi: Add an exception mechanism with error code names, and a function
+  to transform an ACPI_STATUS value into an exception.  This uses
+  AcpiFormatException to decode error codes.
+
+- acpi: Add docstrings to ACPICA functions
+
+Migrate quite a bit of code from GRUB scripting (and supporting C and
+Python scaffolding) to Python:
+
+- Convert MWAIT latency test to Python, with a minimal C helper for the
+  timing-sensitive portion.
+
+  Delete the now-unused "timer" and "cpu_ping" commands.
+
+- Port mwait menu to Python
+
+- Drop code to force specific configuration profiles on Nehalem and
+  Sandy Bridge.
+
+  This code remains available in older releases, but drop it from the
+  current version rather than porting it from GRUB configuration
+  language to Python.
+
+- configure.cfg: Drop support for CPU-specific GRUB configure menu
+  files, since no more such files remain.
+
+- Factor out a bits.brandstring() function to return the brandstring.
+
+- Generate the CPU name on the main menu using Python, and improve title
+  to use CPU brandstring rather than maintaining a table of CPU
+  marketing names in BITS.
+
+- Delete CPU family names and marketing names.
+
+- Drop GRUB-based CPU detection entirely.
+
+  None of the GRUB config files depend on the variables this sets
+  anymore; all CPU-specific code lives in Python now.
+
+- Remove the testsuite module and C expression evaluator.
+
+  The GRUB CPU detection code was the last user of this.
+
+- Remove options to GRUB commands to run on particular CPUs.
+
+  The GRUB CPU detection code was the last programmatic user of this, and
+  command-line users can use Python for this.
+
+- Remove all GRUB commands and options not used manually.
+
+  Nothing uses these commands programmatically anymore, so drop mechanisms
+  to write to environment variables, operate quietly, run tests, format
+  environment variables for display, sleep, or set mwait.
+
+  A future version of BITS may remove the remaining commands entirely,
+  in favor of Python functions, as the Python functions become
+  increasingly high-level and convenient.  If you still rely on the GRUB
+  commands, please contact us.
+
+Migrating all this code from C and GRUB to Python allowed deleting over 9000
+lines of code in BITS relative to the previous release.
+
+Other changes in this release:
+
+- Remove the runppm command to load and run power-management reference
+  code; this is no longer used with current CPUs.
+
+- README.Developers.txt: Update for the switch to build with make.
+
+- README.Developers.txt: Update reference to GRUB version information.
+
+- README.Developers.txt: BITS doesn't need the todos command anymore.
+
+- acpi: Fix reinitialization after termination.  Clear all of the
+  initialization flags, so that reinitialization actually loads tables
+  rather than failing.  This fixes the menu items to change what OS
+  features BITS advertises to ACPI.
+
+- acpi: Don't retrieve full table data just to check if a table exists.
+  get_table and get_table_addr both return None for a nonexistent table,
+  but the former returns a string containing the full table data, while
+  the latter just returns the address.
+
+- acpi: Drop support for AcpiGbl_EnableAmlDebugObject.  Our current
+  setting for AcpiDbgLevel leaves the debug object always enabled
+  regardless of this value, so drop it.
+
+- acpi: Add assert that the number of ACPI_OBJECT_TYPE values hasn't
+  changed
+
+- acpi: Use "bool" to return errors from ACPICA initialization
+
+  Stop using GRUB error codes, since the error code never gets passed
+  through GRUB.
+
+  Also use the proper type to hold ACPICA error codes.
+
+- efi: Add network-related protocol GUIDs
+
+- efi: Add EFI_PCI_IO_PROTOCOL and a simple test function
+
+- Convert many modules to use "from __future__ import print_function".
+
+- testmsr: Remove redundant output in MSR result descriptions
+
+- Eliminate redundant acpica2.h header; move contents to acpica.h
+
+- Delete unused header file misc.h
+
+bits-1154
+=========
+
+- efi: Fix typo in type signatures of OutputString and TestString
+
+- NEWS.txt: Fix typos in release notes for bits-1151
+
+bits-1151
+=========
+
+The "I FFI, UEFI, we all FFI for EFI" release.
+
+BITS now supports making EFI calls via the Python ctypes module, rather than
+manually using efi.call.  This provides simplified call syntax, type safety,
+better (reference-counted) memory lifetime handling, bounds checking, and the
+ability to have EFI call Python callbacks.
+
+All EFI protocols, functions, and types have been converted to use ctypes.
+
+This also provides automatic conversions to and from Python types as
+appropriate.  For instance, functions declared to accept a c_wchar_p (a Unicode
+string) accept Python string and unicode objects:
+
+    out = efi.system_table.ConOut.contents
+    out.OutputString(out, "Hello world!\r\n")
+
+- Add support for the 64-bit EFI calling convention in ctypes
+
+  Ship a separate copy of libffi with 64-bit EFI support added, and change
+  Python's _ctypes module to support that calling convention.
+
+  Add the uintptr_t and intptr_t types to our stdint.h, since libffi needs
+  uintptr_t.
+
+- Convert all EFI functions, structure, and protocols to ctypes
+
+  Now that ctypes can call EFI functions, convert all functions to use it,
+  along with the corresponding types and protocols.  This significantly
+  improves type safety, memory lifetime handling, bounds checking, and
+  similar.
+
+  In particular, code should now almost never use from_address or
+  addressof, since those produce raw addresses that may outlive the
+  objects they point to; code using from_address should now use
+  from_buffer or similar, and code using addressof should use byref or
+  similar.
+
+  Define a new type EFIFUNCTYPE, analogous to ctypes.CFUNCTYPE, for calls
+  using the EFI calling convention.  For convenience, provide a wrapper
+  efi.FUNC that assumes a return type of EFI_STATUS (overridable with a
+  keyword parameter "ret").
+
+  To simplify the process of translating EFI functions and structures from
+  specifications, define appropriate EFI type aliases for ctypes types.
+  For instance, EFI extensively uses the type UINTN for "an integer the
+  size of a pointer", so the efi module defines that type as c_ulong.
+
+  Using ctypes function types also enables many convenient conversions.
+  For example, a function taking a parameter of type c_wchar_p can accept
+  a Python string or unicode object.  See the ctypes documentation for
+  more details.
+
+  When defining function parameter and return types, note that the ctypes
+  types c_char_p and c_wchar_p have additional magic behavior above and
+  beyond a normal pointer, to transparently accept and return strings.
+  This behavior can be convenient, but it means that an EFI function
+  specified to accept or return a pointer to CHAR16 may want to use either
+  POINTER(CHAR16) or EFI_STRING (AKA c_wchar_p) as its type, depending on
+  the desired semantic behavior.  Use POINTER(CHAR16) (and
+  create_unicode_buffer) for a pointer that EFI will fill in (since
+  passing a temporary object converted from a Python unicode object would
+  not produce useful results), or for a returned pointer that the caller
+  must free via the EFI FreePool or similar (since the automatic
+  conversion of return types from c_wchar_p to a Python unicode object
+  would discard the pointer that needs freeing).
+
+  EFIException now decodes known EFI error codes as symbolic names, in
+  addition to showing the hex value of all error codes.
+
+  Since efi now makes much more extensive use of ctypes types, switch from
+  "import ctypes" to "from ctypes import *".  Similarly, bits.present does
+  "from efi import *" to get the EFI types.  In general, modules that just
+  call efi functions should "import efi", but modules defining new EFI
+  protocols or structures should "from efi import *".
+
+  efi.call, and the associated split64() magic for 64-bit parameters on
+  32-bit EFI, are no more.  They will not be mourned.
+
+- Backport a grub change to fix a build failure on systems with new flex
+
+  With current versions of flex, grub failed to build with this error:
+
+  grub_script.yy.c:2367:13: error: 'yy_fatal_error' defined but not used [-Werror=unused-function]
+   static void yy_fatal_error (yyconst char* msg , yyscan_t yyscanner)
+
+  Fix that by backporting the change from git commit
+  9cc836a27be4a95f6f7bfd5b6bc099801645c0ea to disable additional warnings
+  for the flex-generated lexer.
+
+- Disable -Wunused-value for Python
+
+  Current Python on current GCC generates a -Wunused-value warning on uses
+  of the PyObject_INIT macro, because it expands to a comma expression
+  where the rightmost value goes unused if nothing looks at the return
+  value.  This warning turns into an error because of -Werror.
+
+bits-1146
+=========
+
+The "EFI, FFI, fo, fum" release.
+
+BITS now uses the Python ctypes module to access many types of data
+structures and tables in memory, not just EFI.  The ctypes module now
+works for non-EFI builds, so modules such as acpi and pirtable can
+safely use it.  This required modifications to Python's libffi and
+ctypes modules, to handle the various required calling conventions.  See
+the new bits.cdata module for ctypes wrappers that provide improved
+printing, formatting, bitfield handling, and types such as GUIDs.
+
+Much of acpi, pirtable, mptable, and smbios now use ctypes instead of
+custom unpacking routines based on the struct module.  Several new
+internal C routines provide access to data structures as addresses
+rather than Python strings, for direct access via ctypes.  Further
+conversion to ctypes will allow significant reduction in C code in favor
+of Python.
+
+Thanks to many new optimizations, BITS 1146 starts up several times
+faster than previous releases:
+
+- The filesystem API layer for Python code now has a faster
+  implementation of stat(), reducing the cases where it needs to
+  enumerate the parent directory to find the appropriate directory
+  entry.
+
+- The Python pydoc module (with its various dependencies) now loads
+  on-demand when first invoked via help() or the pydoc command.
+
+- Python now supports the zipimport module, and loads the Python
+  standard library from a zipfile.
+
+Other changes in this release:
+
+- Update Python to 2.7.9. Drop changes merged upstream, and add new
+  stubs and compatibility APIs for functions now called by 2.7.9.
+
+- Update to ACPICA version 20141107
+
+- Support the Python shlex module
+
+- The pager now supports saving the currently displayed data to a file
+  on disk.  Since this requires file write support, it only works when
+  booted via EFI.
+
+- Print a message when starting BITS and when loading and initializing
+  early Python modules, to help debug BITS startup and provide an
+  indication of progress.
+
+- smbios: Decode many additional structure types, and add a preliminary
+  Annex A conformance test.  Includes contributions by Cathy Ji.
+
+- efi: Add constants, structures, and helper functions for HII
+  configuration protocols.
+
+- efi: The efi_file class now provides context manager support, to work
+  with the "with" statement.
+
+- efi: Add menu entries to save and print EFI tables, in both raw and
+  decoded form. Includes the System Table, Configuration Table, Runtime
+  Services. and Boot Services. Decoded versions include names for known
+  GUIDs in Configuration table entries.
+
+- acpi: Optionally allow I/O port access from ACPI method evaluation. By
+  default, ACPI method evaluation still ignores attempts to read or
+  write I/O ports. However, acpi.evaluate now accepts a keyword argument
+  unsafe_io=True to explicitly allow I/O. Also add a new debug printf to
+  show attempts to access I/O ports; add "acpica_io" to the debug
+  environment variable to see those attempts.
+
+- acpi: When running under EFI, support saving ACPI tables to disk as
+  separate files, both raw and optionally decoded.
+
+- acpi: Generate the table-dumping menu items from Python.
+
+- acpi: Support dumping decoded ACPI tables to the BITS log.
+
+- acpi: Add a new load_table method to load an SSDT table binary into
+  the ACPI namespace. Usage: acpi.load_table(table_data), where
+  table_data is a string buffer of the SSDT's AML. The contents of the
+  SSDT can be used to either patch existing or add new ACPI methods or
+  data for debug purposes. Given a binary AML file stored on the BITS
+  boot media as /ssdt.aml: acpi.load_table(open("/ssdt.aml").read())
+
+- acpi: get_objpaths, display_objects, and dump now support limiting
+  maximum object depth, with a new optional depth parameter.
+
+- acpica: Provide more logging and debugging functions, to help debug
+  internal ACPICA failures.
+
+- _acpi: Add internal functions to get and set AcpiGbl_EnableAmlDebugObject
+
+- init.cfg: Add a commented example to enable verbose logging from
+  Python; useful to debug Python module loading.
+
+Bugfixes:
+
+- acpi: Fix double-free in _eval error path when processing packages
+
+- acpi: Handle package arguments correctly in acpi.evaluate.
+  acpi.evaluate attempted to convert tuples to ACPI packages, but did
+  not recursively convert the objects in the tuple to ACPI objects, so
+  any attempt to pass a non-empty tuple as an argument failed.  Fix by
+  recursively calling _acpi_object_from_python on each component of the
+  tuple.
+
+- acpi: Handle CPU paths and Device paths separately.  Evaluate the
+  former to get a ProcID, and call ._UID on the latter to get a UID;
+  don't do both on both.  Make display handle processors with UIDs
+  correctly, and format them correctly.
+
+- acpimodule.c: Fix unused parameter warnings
+
+  Previously hidden by lax warning flags that ACPICA requires; this will
+  allow re-enabling that warning via GCC pragmas.
+
+- efi: import efi from generated menu entries; avoid assuming that some
+  other global Python code has already imported efi.
+
+- efi: Make EFI table saving more robust (and verbose). Add error
+  handling for unusual boot scenarios in which the EFI boot filesystem
+  does not match the GRUB root directory.
+
+- Avoid printing spurious pre-import messages for efi modules when not
+  on efi. Using try/except to catch ImportError didn't stop the initial
+  message from printing. Check sys.platform instead.
+
+- ttypager: When trying to import efi, only catch ImportError
+
+- When viewing the log, don't write the log to the log
+
+bits-1090
+=========
+
+- Update to ACPICA version 20140325
+
+- Backport GRUB2 commit 4e42521d8c9232b6ee9eac7d8b4945a7479de781 to preserve
+  16-byte alignment of the stack on EFI calls
+
+- python: Support the csv module
+
+bits-1084
+=========
+
+- efi: Implement comparisons on GUIDs properly, including comparisons with
+  UUIDs
+
+  Fixes an exception in smbios and mptable on EFI systems when doing
+  GUID lookups.
+
+- mkpresent: Work around bug in pdftoppm with rotated PDFs
+
+  If the generated image has width and height transposed, rerun pdftoppm
+  with transposed input values.
+
+bits-1081
+=========
+
+The "ctypes. ctypes run. run types run" release.
+
+This release introduces preliminary support for the Python ctypes module
+in EFI builds.  This includes the initial infrastructure to compile
+libffi as part of BITS.
+
+ctypes data types, ctypes structures, and read/write access to memory
+work.  This replaces many uses of bits.memory, struct.pack,
+struct.unpack, and the BITS unpack module.  In particular, the use of
+ctypes data types and structures allows round-trip conversions from
+structures in memory to Python data types and back, generally without
+making copies.
+
+This initial implementation provides enough support for all the data
+structures in the efi module, which has now completely switched over to
+ctypes-based data types and structures.
+
+Notable limitations:
+- No support for non-EFI builds yet, because GRUB uses stdcall and
+  regparm=3 for PC BIOS builds, which libffi does not support on
+  non-Windows systems.
+- Function calls to EFI functions still require efi.call; the
+  ctypes-based FFI does not yet work, as it does not understand the EFI
+  calling convention.
+- dlopen does not work, so there's no way to obtain pointers to existing
+  C functions to call.
+
+Note that to support this change, the version of Python built into BITS
+now internally uses UTF-16 (2-byte characters) rather than UCS-4 (4-byte
+characters), to match EFI.  This allows the use of the ctypes functions
+for the C wchar_t type, rather than hand-rolled functions for two-byte
+Unicode.  Python still has full support for all of Unicode, including
+characters outside the Basic Multilingual Plane; this just changes the
+internal representation.  However, attempting to use characters outside
+the BMP in EFI calls may or may not work, depending on your firmware;
+your mileage may vary.
+
+This release also introduces support for reading and writing files using
+EFI.  On EFI systems, BITS now has full support for writing arbitrary
+files to a FAT filesystem.  The new efi.get_boot_fs() function will
+retrieve the filesystem BITS booted from, as an efi_file, a new Python
+file-like object.  In addition to the usual file methods, an efi_file
+provides methods to open and create files and directories.  For example:
+
+    import efi
+    root = efi.get_boot_fs()
+    newdir = root.mkdir("newdir")
+    newfile = newdir.create("newfile")
+    newfile.write("Hello world!\n")
+
+Or, chaining the calls together (convenient for command-line usage):
+
+    efi.get_boot_fs().mkdir("newdir").create("newfile").write(data)
+
+The new functions `acpi.efi_save_tables()` and `efi.save_tables()` use
+this new filesystem write capability to save copies of ACPI and EFI
+tables, for later inspection.
+
+Note that EFI firmware typically only supports FAT filesystems, not
+iso9660 (the filesystem used on optical media).  The BITS .iso images,
+even when imaged to a USB disk, keep most of their files in an iso9660
+filesystem, with the exception of a small FAT filesystem used to store
+GRUB itself as an EFI binary.  Thus, get_boot_fs() will not produce the
+expected results when booting from an optical disc or from a disk
+created from a BITS .iso; for full read/write support, create a
+FAT-based BITS disk, following the procedure in INSTALL.txt.
+
+This release adds support for many new EFI protocols:
+
+- efi: Add read/write file support using FileProtocol, including a
+  file-like object
+
+  The efi_file wrapper includes the standard Python file-like methods
+  (read, write, seek, tell, close, flush), EFI-specific properties
+  (file_info, file_system_info, volume_label) and methods (delete), and
+  methods to create or open another efi_file relative to a directory
+  (open, create, mkdir).
+
+  Also add a definition of the EFI SimpleFileSystemProtocol to open a
+  block device, with a "root" property to get the root directory as an
+  efi_file.
+
+  Add a get_boot_fs() function to return the filesystem BITS booted
+  from, obtained via the DeviceHandle of the LoadedImageProtocol on the
+  image handle.  Useful as the root for writing files.
+
+- efi: Add DevicePathProtocol and DevicePathToTextProtocol
+
+  DevicePathToTextProtocol includes helpers to transform the returned
+  paths into Python unicode strings, and then free the original memory.
+
+- efi: Add LoadedImageProtocol
+
+Other changes in this release:
+
+- python: Support the zlib module
+
+- bits.present, mkpresent: Use zlib to compress and decompress slide images
+
+  Provides an order of magnitude improvement to disk usage and load time.
+
+- acpi: Add an efi_save_tables utility function to save ACPI tables to files
+
+  As the name suggests, this function only works on EFI, since it uses the
+  EFI file write support.
+
+  In addition to the binary dumps, this also includes text decodes of
+  selected structures, and enough address information to recreate the
+  tables in memory.
+
+- efi: Add a function efi.save_tables() to save the core EFI tables to files
+
+- efi: As a workaround for limitations in the internal EFI function call
+  interface, add a compatibility layer for 64-bit arguments on 32-bit
+  platforms.  Wrap 64-bit arguments in efi.split64(), and they will
+  automatically be split into pairs of 32-bit arguments on 32-bit
+  platforms, for compatibility with the current efi.call interface.
+
+- Add EFI tests.  The first round of tests verifies the CRCs of the core
+  EFI tables.
+
+- efi: Add a base class for EFI protocols
+
+  Protocols are ctypes structures with an associated GUID; they provide
+  a .from_handle classmethod to get the protocol from an EFI handle (via
+  OpenProtocol) and wrap it in the protocol class.
+
+- efi: Add more known UUIDs
+
+- efi: When printing structures, format pointers and unsigned types as
+  hex, and list out the contents of arrays.
+
+- efi: Various new helper functions:
+  - Add a helper function check_status to throw an exception for !=
+    EFI_SUCCESS
+  - Add a helper check_error_value to handle non-status return values.
+    Some EFI functions return a non-status return value, but still use
+    the EFI_ERROR bit to indicate an error.  Add a helper that checks
+    only that bit, and otherwise returns the value for subsequent use.
+  - Add a locate_handles helper to call LocateHandle with a given GUID.
+    This helper handles the two-pass memory allocation, and returns a
+    ctypes array of handles.
+  - Add helper functions to compute table CRC32 values.  These compute
+    the CRC32 as if the table's CRC32 field is 0, and then compare the
+    result to the table's actual CRC32 field.
+  - Add a helper function efi.to_bytes to convert a ctypes structure to
+    raw bytes
+
+- README.Developers.txt: Document Python patches for ctypes and libffi
+
+bits-1048
+=========
+
+This release introduces a new bits.* Python module namespace for new modules,
+to keep the module namespace more contained:
+
+- python: Move bits to bits/__init__.py to allow modules under bits.*
+
+- python: Split pyfs functions out of bits into their own module, bits.pyfs
+
+- python: Split pause() into a separate bits.pause module to avoid a circular
+  reference
+
+  bits imported redirect for redirect.nolog(), for use in pause(), and
+  redirect imports bits, creating a circular reference.  Split pause()
+  into its own module, bits.pause, to break that cycle.
+
+- Add new bits.pirtable module to find, parse, and test the PCI Interrupt
+  Routing ($PIR) table
+
+Other changes in this release:
+
+- Add bits.present, a module for giving a presentation using EFI GOP
+
+- Add mkpresent, a script to generate slide images for bits.present
+
+- readline: Add a mechanism to hook function keys and call arbitrary functions
+
+- build: Support building local files into the .iso
+
+  Useful for local testing; avoids the need to construct and subsequently
+  modify a writable USB disk.
+
+- mptable: Support finding the MP Table on EFI via configuration table GUID
+
+- smbios: Support finding the SMBIOS tables on EFI via configuration table GUID
+
+- efi: Add known UUIDs for various protocols
+
+- efi: Create named constants for known UUIDs
+
+- efi: Add function to dump all protocols in use, using LocateHandleBuffer and
+  ProtocolsPerHandle
+
+- acpi: Handle "local reference" objects
+
+- acpi: Add test for parsing MPST
+
+- mptable: Validate header length and checksum after finding an _MP_ signature
+
+  If the length isn't valid or the checksum doesn't match, keep searching.
+
+- acpi: When displaying the RSDT or XSDT, decode the name of each table
+
+  A list of table pointers is...uninformative.
+
+- acpi: Add a display_objects() function to show object types
+
+  get_objpaths just retrieves all the object names; display_objects
+  additionally shows the type of each object.
+
+- ttypager: Add a context manager that sends all output through the pager
+
+  This avoids the need to manually accumulate a string and call ttypager
+  on it, and thus avoids creating duplicate versions of functions, one
+  with the pager and one without.
+
+  Note that all output is deferred until the context manager exits, and
+  the context manager captures all exceptions and displays the traceback
+  through the pager.
+
+- acpi: Use the new ttypager context manager in display_resources
+
+- ttypager: Make home and end keys move to beginning and end, respectively
+
+- platform: Make cpuids and msrs iterable
+
+  Walking them produces the list of all known (non-generic) CPUID and MSR
+  decoded values.
+
+- platform: Add a dump() function to show all CPUIDs and MSRs for all CPUs
+
+- platform: Make platform.dump() display using the pager
+
+- Add an explore menu option to show platform information via platform.dump()
+
+- platformbase: Improve documentation printed with CPUID and MSR objects
+
+  Show the APIC ID and docstring for CPUIDs and MSRs.
+
+- platformbase: Add a sanity check to MSRs to prevent instantiating the generic
+  MSR
+
+  The MSR class requires an MSR number, and does not set that MSR number
+  itself.  Subclasses that decode specific MSRs must set that MSR number.
+
+- python: Stop using Python 2.7 {set} notation, for 2.6 syntax compatibility
+
+  BITS is built using Python 2.7, but with this one change, the modules
+  are parseable using the Python 2.6 ast module, useful for running
+  analysis scripts from a host system.
+
+Bugfixes:
+
+- acpi: Fix structure alignment and padding for ObjectInfo on 64-bit
+
+  ACPI_PNP_DEVICE_ID contains an integer followed by a pointer, so it has
+  padding in the middle on 64-bit.  The containing structure has an 8-byte
+  address which needs padding to an 8-byte boundary on 64-bit.  Handle
+  both of those instances of padding.
+
+- acpi.evaluate: Fix error handling when translating an object within a package
+
+  When converting an ACPI object to a Python object, an unknown ACPI
+  object type will set the Python exception and return NULL.  However,
+  when that error occurred within a package, the caller would then add
+  that NULL to the package and continue, rather than propagating the
+  error.  Fix the package-handling code to reclaim the tuple and propagate
+  the error further up.
+
+- acpi: Fix unpacking of object info structure
+
+  Invalid strings still have both a length and offset to unpack, even
+  though the length is 0.
+
+- python: redirect: Drop unused import of acpi
+
+- testacpi: Fix typo in a test description
+
+- python/msrs.py: Fix typo in an MSR name
+
+bits-1007
+=========
+
+The "64 bits ought to be enough for anyone" release.
+
+Add initial support for 64-bit EFI.  A BITS .iso image will now boot as
+either a disk image or CD image for any of 32-bit BIOS, 32-bit EFI, or
+64-bit EFI.  For updated installation procedures, see INSTALL.txt.
+
+Add a GRUB patch to 16-byte align the stack for grub_main().  The x86-64
+ABI requires a 16-byte-aligned stack, which GRUB did not provide.  That
+caused some crashes, notably when running some SSE instructions.  Fix by
+aligning the stack in assembly before calling grub_main().
+
+Port SMP support to support running processors in 64-bit mode:
+
+- Add CPU bringup code for 64-bit long mode.  Port all remaining
+  assembly to 64-bit, and to the 64-bit ABI.
+
+- Since long mode requires paging, pass the page-table pointer from the
+  BSP (as set up by the firmware) to the APs.  Note that the current
+  approach to this will fail if the firmware relocates its page tables
+  above 4GB after its initial page table setup.  Also note that since
+  all memory requires mapping via the page table, accessing memory not
+  mapped by the BSP page table (such as a wild pointer supplied by a
+  firmware structure or an adventurous tester) will trigger an unhandled
+  page fault and unceremoniously die.
+
+- Increase the size of the SMP working memory to accomodate larger
+  data structures.
+
+- Use a relative offset in the GPF handler, not an absolute offset; that
+  avoids the need for a 64-bit offset.
+
+- Port IDT parsing and setup from assembly to C.
+
+- Port many assembly functions to use inline assembly, eliminating their
+  calling-convention-specific prologue and epilogue code, to simplify
+  the 64-bit port, and make the assembly more maintainable (by having
+  less of it):
+  - cpuid
+  - pause
+  - I/O port read/write
+  - rdtsc
+  - cli and sti
+  - rdmsr
+  - wrmsr
+  - infinite loop
+  - lidt and sidt
+  - getting CS
+  - drop_ap_lock
+
+- smp: Delete several bits of old unused code:
+  - Unused assembly functions
+  - Unused data structures
+  - Unused function prototypes
+  - The "real-mode callback" mechanism, once used to park CPUs before
+    booting an OS, but eliminated long ago by simply leaving the CPUs in
+    an mwait loop in memory reserved from the OS.
+  - A synchronization variable that the AP code no longer uses (a relic
+    of waking the APs up via SIPI each time we have code to run, rather
+    than waking them up once and putting them in an mwait loop waiting
+    for work to do).
+  - Code that allows the function called via SIPI to return, now unused
+    because we call a function that waits forever for work to do.
+
+Numerous cleanups to make C code 64-bit clean:
+
+- Use pointer types rather than integral types when appropriate.
+
+- Fix pointer-size and integer-size assumptions.
+
+- Fix printf format strings.
+
+- Make Python interface code 64-bit clean.  Use Py_BuildValue and
+  PyArg_ParseTuple 'k' conversions for pointers.  Convert safely between
+  some ACPI always-32-bit "pointers" and native pointers, with bounds
+  checking.  Consistently use "unsigned long" for an integer of the same
+  size as a pointer.
+
+- Make various config defines and typedefs portable.
+
+- Rewrite Python's file <-> fd mapping to support sizeof(int) != sizeof(FILE *)
+
+  Abstract FILE * <-> integer fd conversions into functions to make them
+  easier to replace and more maintainable.
+
+- Handle overflow errors safely in fwrite()
+
+- python: fdlibm: Explicitly define __LITTLE_ENDIAN
+
+  fdlibm autodetected __LITTLE_ENDIAN based on some compiler definitions
+  defined for 32-bit x86, but not for 64-bit x86.  Define it explicitly to
+  bypass fdlibm's faulty autodetection.
+
+Only one change to make the Python code 64-bit clean; thanks to the
+wonders of a language with arbitrary-precision integers, the one and
+only change involves parsing data structures supplied by the
+(non-Python) firmware:
+
+- efi: Parse the (completely undocumented) padding after
+  FirmwareRevision in system table
+
+Update boot support and documentation:
+
+- INSTALL.txt: Update installation instructions for EFI support 
+
+- build: Build and install EFI binaries
+
+  grub-mkrescue already creates EFI binaries and embeds them in the El
+  Torito disk image for the .iso; however, those are not easily accessible
+  for use when creating a writable disk image, and they don't include all
+  the necessary modules to support disks.  Build images with a more
+  complete set of modules for disk support, and ship them in /efi/boot in
+  the BITS binary distribution.
+
+- Add support for booting BITS .iso files as EFI disk images, via an
+  even more hybridized hybrid .iso format.
+
+  Introduces a dependency on xorriso 1.3.0 or newer, and backports several
+  grub-mkrescue changes from upstream GRUB.
+
+- README.Developers.txt: Document that building the EFI image requires
+  mtools (grub-mkrescue invokes mtools to construct the EFI El Torito
+  disk image to embed in the .iso).  The previous release introduced
+  this dependency but didn't document it.
+
+Other changes in this release:
+
+- _bits: Split out SMP and ACPI functions into separate _smp and _acpi
+  modules, making it easier to do incremental ports of _bits.
+
+- Move test verbosity level entirely to Python
+
+  No tests use GRUB scripting anymore, so eliminate the test_verbose
+  environment variable, and move the test verbosity level entirely inside
+  the Python testsuite module.
+
+- build: Enable parallel builds on all available CPUs
+
+- efi: Expand variable-reading sample code to read and display variable values
+
+  Uses both GetNextVariableName and GetVariable.
+
+  Displays variable values as hex/ascii dumps, since they may (and usually
+  do) contain non-ascii data, and the interpretation depends on the
+  variable UUID and name.
+
+- python: Implement assert() and make it actually assert.
+
+  GRUB's assert prints a message on assertion failure but then returns.
+  Abort instead.
+
+  Also support capturing and printing the assert expression.
+
+- smp: Verify that the SIPI target code fits in the region allocated for it
+
+  The SIPI target code has to fit within the first 2k of the allocated
+  SIPI target page, minus the size of the data structure passed to APs.
+  Before expanding that code further, add a check to make sure it won't
+  silently start conflicting with the data structure.
+
+- python: Move all the C/POSIX compatibility functions from inlines in
+  pyconfig.h to a separate source file
+
+- testsuite: Remove the rdmem GRUB command
+
+  No GRUB scripts use this functionality, and Python scripts have equivalent
+  (and much more capable) functionality through bits functions.
+
+- pstate: Handle processors without turbo when testing hardware P-states
+
+- smilatency: Make the test variant that disables USB via BIOS handoff actually
+  disable USB via BIOS handoff
+
+bits-945
+========
+
+Add initial support for 32-bit EFI.
+
+BITS now builds GRUB and the BITS-specific GRUB modules for Python,
+ACPICA, SMP, and other support modules for both 32-bit BIOS (i386_pc)
+and 32-bit EFI (i386_efi), and constructs a .iso which boots both ways.
+
+The resulting .iso successfully boots as a CD using KVM with OVMF, and
+still boots as either a CD or hard disk on BIOS-based systems.  Note
+that the .iso does not support booting as a hard disk on EFI-based
+systems.
+
+On EFI platforms, Python's sys.platform now returns "BITS-EFI"; BIOS
+platforms will continue to return "BITS".  (Future 64-bit EFI support
+will also use "BITS-EFI"; use bits.ptrsize to find the native size of a
+pointer, and use the "P" type with the struct or unpack modules to pack or
+unpack a native-sized pointer.)
+
+On EFI, ACPICA finds the RSDP as an EFI configuration table rather than
+via memory search.
+
+BITS now provides an "efi" module with some preliminary interfaces to
+access EFI data structures and call EFI functions.  This module provides
+all the functionality needed to find EFI interfaces by UUID and call
+arbitrary EFI functions entirely from Python, without writing any new C
+code.  For example, to print an iconic greeting:
+
+    import bits, efi
+    greeting = efi.encode_UCS2_mem("Hello world!\r\n")
+    efi.call(efi.system_table.ConOut.OutputString,
+             efi.system_table.ConOut._addr,
+             bits.memory_addr(greeting))
+
+The new efi module includes:
+
+- The efi.call function seen above
+- Helpers for buffer and UCS-2 Unicode string manipulation
+- efi.system_table, a decoded version of the EFI system table and all
+  the structures and interfaces nested within it, including
+  BootServices, RuntimeServices, and ConIn/ConOut/StdErr.
+- efi.print_variable_names, a larger code sample which demonstrates how
+  to retrieve, decode, and print the list of EFI variables using
+  GetNextVariableName
+- efi.log_efi_info, a function now called at BITS init time to log basic
+  information about the EFI firmware, including the firmware vendor, the
+  firmware version, the UUIDs of supported configuration tables, and the
+  corresponding names for any recognized UUIDs.
+
+Expect the efi module interface to change in future versions as the
+support for calling EFI functions and decoding EFI data structures
+becomes simpler and easier to use.
+
+Note that EFI's default text input API doesn't support returning
+Ctrl-characters, making many common line-editing keys unavailable, and
+making the essential Ctrl-D keystroke to exit Python impossible; BITS
+now accepts Escape as an alternative to Ctrl-D.
+
+
+Other supporting infrastructure leading to EFI support:
+
+- bits: Add bits.ptrsize, which contains the machine's native pointer
+  size (4 or 8)
+
+- bits: Add bits.malloc to create a new buffer of a specified size
+
+  Through the wonders of garbage collection, there is no corresponding
+  bits.free.
+
+- bits: Add a memmove function to manipulate memory directly
+
+  Needed to write buffer manipulation functions in Python rather than in
+  C.
+
+- Add GRUB patch fixing EFI memory allocator page rounding
+
+  The EFI memory allocator rounded allocation sizes up to 1k boundaries
+  rather than 4k page boundaries.
+
+- Add GRUB patch to support allocation below 1M in the EFI memory
+  allocator
+
+  Needed to allocate memory for an IPI handler.
+
+- Add GRUB patch for EFI memory allocator memory type mapping
+
+  EFI's AllocatePages call will refuse attempts to allocate memory and
+  leave it marked as EfiConventionalMemory (free memory available for
+  subsequent allocations), so map requests for GRUB_MEMORY_AVAILABLE
+  into EfiLoaderCode rather than EfiConventionalMemory.
+
+- smp: After attempting to allocate a page below 1M, verify its address
+
+- smp: Allocate working memory with grub_memalign, not
+  grub_mmap_malign_and_register
+
+  On BIOS builds, the difference is harmless, but on EFI builds the
+  latter calls the firmware's AllocatePages rather than using GRUB's
+  internal memory allocator.  Since we don't need to reserve the working
+  memory after OS boot, we don't need to use the firmware's memory
+  allocator.
+
+- smp: Handle systems where the BSP already has an IDTR
+
+  On EFI, GRUB sets up a non-zero IDTR, rather than using the real-mode
+  one IDTR at address 0.  Fix that code path to not attempt to "restore"
+  to a real-mode IDTR.  Instead, save and restore the GPF handler in the
+  existing IDTR around the function call in smp_function.
+
+- smbios: Gracefully handle systems without SMBIOS tables
+
+- mptable: Handle systems that don't have an EBDA
+
+  On systems without an EBDA, the EBDA address in the BDA contains a 0;
+  handle that rather than searching at 0.
+
+- smp: Find the MADT using acpica rather than searching for the RSDP in
+  memory
+
+  In addition to eliminating duplicate code, this allows smp to work on
+  EFI, which finds the RSDP as an EFI system table rather than through a
+  memory search.
+
+- readline: Add Escape as an alternate EOF character, for when Ctrl-D
+  doesn't work
+
+  EFI's default text input API doesn't support returning
+  Ctrl-characters, making the essential Ctrl-D keystroke impossible; add
+  Escape as an alternative.  Also improves compatibility with GRUB's own
+  command line, which uses Escape to return to the menu.
+
+Other improvements:
+
+- README.Developers.txt: Document that the lnxboot partition number
+  patch got merged upstream
+
+  GRUB merged the patch in bzr revno 5185.
+
+- mptable: Check for the MP Floating Pointer Structure in a
+  non-spec-compliant location
+
+  Some BIOSes put the MP Floating Pointer Structure in the 0xE0000
+  block, rather than a spec-compliant location like the 0xF0000 block.
+  Search that block to find the table in that block, and add a test that
+  fails on such BIOSes.
+
+- python: Split pyfs into a separate C module, _pyfs
+
+- smbios: Add a blank line before printing the SMBIOS information to the
+  log
+
+- smbios: Wrap each SMBIOS structure when printing
+
+Build system improvements:
+
+- build: Build from copies of the source directories, not the originals
+
+  The build procedures for GRUB and Python potentially leave byproducts
+  in the source directories.  Rather than attempting to clean those up
+  afterwards, build from copies of the source and leave the originals
+  pristine.  This then removes the need to clean the source trees both
+  before and after the builds.
+
+  The build procedure now verifies at the beginning that the source
+  directories appear pristine (no generated Makefile).
+
+- Support out-of-tree GRUB builds: Use $(srcdir) or $(top_srcdir) as
+  appropriate when constructing include paths.
+
+- Configuring and building the same GRUB source tree for two different
+  platforms fails without doing a clean in-between, so instead, do an
+  out-of-tree configure and build for each platform.  (See below for
+  many other build system improvements.)
+
+- build: Set CCACHE_BASEDIR so ccache works on the temporary source
+  copies
+
+  Normally, ccache will never hit if the path to the source or include
+  files changes; thus, copying all the source trees to a temporary
+  directory makes ccache always miss.  Set CCACHE_BASEDIR to the root of
+  that temporary directory, so that ccache can still hit if the
+  remainder of the paths match.
+
+- build: Copy grub modules manually rather than running grub-install
+
+  Rather than running grub-install to copy grub modules, and mocking up
+  all the other things it wants to do as no-ops, just copy the modules
+  manually.
+
+Bugfixes:
+
+- acpi: Fix improper access to number_system_localities field which
+  caused an exception.
+
+- In generated menuentries, stop deleting modules after import.
+
+- smp: Initialize working memory to 0
+
+  smp_init added a magic signature to its working memory, and checked
+  for that signature to see if it had already run; however, smp_init did
+  not clear its working memory after allocating it.  On systems that
+  don't clear RAM on reboot, smp_init would allocate its working memory
+  at the same address each time, and would thus think it had initialized
+  when it hadn't, causing Bad Things to happen.
+
+  Fix by initializing working memory after allocation.
+
+- acpica: Make acpica_init_state static
+
+  Nothing outside of acpica.c accesses acpica_init_state, so make it
+  static and drop it from acpica.h.
+
+- bits: Make cpuid_result print all eight digits of its registers
+
+  Format using #010x, since the 0x counts as part of the length.
+
+- testacpi: Fix typo in _PSD test
+
+bits-910
+========
+
+- acpi: Add decode for all resource descriptors from ACPI _CRS and _PRS
+  methods.
+
+- Add ability to discover, decode and display the MP Table.
+
+- SMBIOS: Add SMBIOS decode and display to Explore menu.
+
+- ttypager: ttypager can now detect redirect status and output to the
+  log file.
+
+  When redirect.log() is active, text sent to ttypager will be directed
+  to the log file first and then metered to the screen with no further
+  outputs to the log file. When redirect.nolog() is active, text sent to
+  ttypager will be directed to the log file first and then ttypager will
+  exit with no text sent to the screen.
+
+  ttypager module's ttypager method has been modified to check whether
+  redirect's log() or logonly() context managers are active and then to
+  direct all cached output to the log before metering text to the
+  screen. This allows ttypager to be used when the logonly() and log()
+  conext managers are actively limiting outputs.
+
+  The redirect module now has a module-level status indicating when the
+  log(), logonly(), or nolog() context managers are active.
+
+- acpi: Add get_object_info() to get information from an ACPI namespace
+  object.
+
+  acpi.get_object_info() accepts an ACPI namepath and returns decoded
+  information using ACPICA's ACPIGetObjectInfo().
+
+- acpi: Add decode for software licensing-related tables MSDM and SLIC
+
+- menus: Discontinue deletion of imported Python modules used in menu
+  entries.
+
+  Deleting every module imported by Python menu entries impacts the
+  interactive python interpreter environment.
+
+  Only delete modules imported during BITS initialization, before the
+  Python interpreter is available.
+
+- bits: Modify pause() method to only print the "Press any key..."
+  message to the screen.
+
+- SMBIOS: Refactor SMBIOS class to move header fields into a separate
+  class.
+
+- Bugfixes:
+  - Make CPU frequency detection fail gracefully in the absence of
+    APERF/MPERF
+  - Fix Python reference leaks caused by Py_BuildValue "O" on a
+    referenced object.  Py_BuildValue's "O" type adds a reference to an
+    object, while "N" expects an already-referenced object.  Fix memory
+    leaks caused by using "O" on an object that already has a reference.
+  - SMBIOS: Fix the type of enumerated_type in SystemEnclosure, which is
+    a bitfield, not a string.
+  - P-state test now uses the one detected processor when no APIC table
+    exists.
+  - Only check for Turbo if 2 or more P-states exist.
+  - PSD test now uses the new ACPI _PSD class.
+
+bits-893
+========
+
+- Port BITS to GRUB 2.00
+
+  - Drop backported GRUB patches already included in 2.00.
+
+  - Forward-port our remaining GRUB patches, fix some new bugs in 2.00,
+    and update the patch list in README.Developers.txt accordingly.
+
+  - Update the build process to support the new build system, based on
+    autotools and autogen.
+
+  - Since GRUB no longer waits for user input after running a menu entry
+    unless an error occurred, add an explicit pause at the end of
+    entries using the GRUB pager, and add support to our pager to not
+    exit at the end of a file.  This has the added bonus of allowing
+    backward scrolling after hitting the end of a file.
+
+  - Update readline and the pager for changes to GRUB's input interface.
+    Now supports reading keys and modifiers as a unit, avoiding
+    potential race conditions when reading them separately.
+
+  - Various updates to C code to adapt to new GRUB interfaces.
+
+  - Fix ACPICA portability interface for changes to GRUB.
+
+  - Fix some new warnings that GRUB now includes the flags for.
+
+- Extensive additions, improvements, and bugfixes to the ACPI parsing
+  infrastructure.  In particular:
+
+  - Add method result parsing and corresponding classes
+
+    In addition to cleaning up method handling, this paves the way for
+    tests of methods, which the previous decode-print-and-throw-away
+    approach did not support.
+
+  - Automatically generate the menu of ACPI methods
+
+  - Improve the Struct and Unpack infrastructure, and factor it out into
+    a separate unpack module for use by other structures, such as
+    SMBIOS.
+
+  - Add a helper for unpacking a series of substructures
+
+    Numerous tables follow the pattern of unpacking one of several
+    possible substructure classes repeatedly until running out of data
+    in the unpackable.  Capture that pattern in a helper function
+    unpack_all.
+
+  - Add parsing for the FACP
+
+  - Handle SRAT subtables with "enabled" other than APIC and X2APIC
+    affinity
+
+  - Handle systems without an APIC
+
+  - Fix wrapping of text before paging to avoid hitting 80th column
+
+    GRUB automatically wraps text at the 80th column, and that automatic
+    wrapping breaks the pager's count of lines.  However, acpi wrapped
+    lines at 78 characters and used a two-space indent; thus, lines
+    exactly 78 characters long, or with word lengths that resulted in a
+    78-character line, would end up printing an 80th character and
+    triggering GRUB's word-wrapping.  Fix by changing wrapping to 77
+    characters.
+
+- Many improvements to SMBIOS parsing and decoding; in particular:
+
+  - Rewrite smbios to use unpack, and decode structures more thoroughly;
+    includes contributions from Scott Lawson.
+
+  - In type 0 (BIOS information), handle the minor version correctly
+
+    The minor version in this structure represents the digits of a
+    decimal value, so 34 means .34, 4 means .4, and 41 means .41, so
+    comparing the numeric value of the minor version (for instance, >=
+    4) does not work correctly.  Compare it as a string instead.
+
+  - When dumping SMBIOS structures, dump the string table and its memory
+
+    This helps when trying to hand-decode an unknown SMBIOS structure.
+
+  - Decode several more SMBIOS structures, and handle parse failures
+    more gracefully
+
+    Previously, decode failures in any SMBIOS structure would result in
+    a complete parse failure and no data.  Catch exceptions inside each
+    structure parser, and preserve the fields decoded so far.
+
+- Move line-wrapping into ttypager, and use the pager for more menu options
+
+  SMBIOS, and miscellaneous ACPI bits, now use our pager rather than
+  GRUB's pager.
+
+- smp: Mark mp_worker as noreturn
+
+  Triggers a warning with GCC 4.4.5 otherwise.
+
+bits-862
+========
+
+The "A Complicated Parsing Interface (ACPI)" release
+
+- Rewrite acpi module to use new unpacking, parsing, and classes
+
+  This introduces a new data unpacking infrastructure and class, replacing
+  most of the uses of namedtuple with something more extensible and
+  flexible.  The new infrastructure handles nested tables and reused
+  common structures much more cleanly, and automatically generates output
+  code based on field-by-field formatting instructions.
+
+  In the process, add support for several new ACPI tables, including the RSDP,
+  RSDT, XSDT, _MAT, and FACS.  Also decode more fields of existing tables, and
+  break out some flags fields into individual flags.
+
+  Update init and testacpi to handle the changes to the acpi API.
+
+  Most importantly, this new infrastructure makes it much easier to write tests
+  based on the contents of ACPI tables.
+
+- acpi.get_table: Support retrieving the RSDP, RSDT, and XSDT
+
+  ACPICA's normal AcpiGetTable does not support retrieving these tables by
+  signature.  Add C functions in _bits to retrieve them, and then hide the
+  special-casing in a new Python implementation of get_table, so that
+  acpi.get_table works transparently for these tables.
+
+- Add new acpi.show_checksum function, to compute and display a table's
+  checksum
+
+- Make acpi.get_table's instance parameter default to 1
+
+  The underlying AcpiGetTable method accepts either 0 or 1 to refer to the
+  first instance, 2 for the second instance, and so on.  Using 0 seems
+  inconsistent; let's embrace the 1-based ordering.
+
+- acpi: Preserve linebreaks when wrapping, to improve formatting of tables
+
+- Avoid returning duplicate signatures in acpi.get_table_list()
+
+  acpi.get_table_list() returned one copy of a table signature for each
+  instance of a table.  Return a sorted list of unique signatures instead.
+
+- init: Make ACPI-related initialization more robust against exceptions
+
+bits-849
+========
+
+- Add a top-level menu item to invoke the Python interactive interpreter
+
+  This avoids the need to hit 'c' for a GRUB command line only to type
+  "python".
+
+- Prototype API for hierarchical CPU register decoding.
+
+  This allows syntax like:
+  platform.cpus[0].cpuids[0].max_leaf
+  platform.cpus[0].cpuids[1].aes
+  platform.cpus[0].msrs.IA32_APIC_BASE.x2apic_enable
+
+  Infrastructure implemented by Burt Triplett and Josh Triplett.  CPUID
+  register decoding implemented by Cathy Ji.
+
+- readline: Implement Ctrl-O, to run a line and load the next line from history
+
+  This makes it easy to re-run multi-line commands, with or without edits.
+
+  Note that since the Python interactive interpreter requires a blank line
+  after a multi-line block, the history will remember blank lines (though
+  not multiple consecutive blank lines).
+
+- Add a new generated menu of all ACPI table decoding options
+
+  This new menu offers options to dump every table on the system
+  (including multiple instances), and decode any that BITS knows how to
+  decode.
+
+  Refactor the ACPI menus to split out table decoding, method decoding,
+  OS reporting, and the dump-everything option.
+
+- Documentation updates:
+  - Create a new Documentation directory in the source for more detailed
+    documentation.  Ship that directory as /boot/Documentation on BITS
+    images, as well.
+  - README: Mention Documentation directory.
+  - Add documentation on Python line-editing keybindings.
+  - Add a top-level menu item to browse documentation.  Shows all files in
+    the new Documentation directory, with their filenames and the title from
+    their first line.
+  - Split microcode documentation into a new Documentation/microcode.txt
+  - Split reference-code documentation into a new
+    Documentation/reference-code.txt
+  - README: Move detailed dependency version info to README.Developers.txt.
+    Just leave a simple list of dependencies and links in the credits of
+    README.
+
+bits-837
+========
+
+- Update to ACPICA version 20130517
+
+- Update Python to 2.7.5
+
+  Update pyconfig.h, handle new definitions for 32-bit and 64-bit sized
+  integer types, and define EINTR (which Python will never receive but
+  nonetheless expects a definition of).
+
+- Python readline: write out full lines at a time rather than
+  character-by-character
+
+- Add a new Python "bitfields" module for bitfield manipulation
+
+  Most Intel documentation references bitfields defined as [msb:lsb], or
+  as [bit]; this module allows creating and extracting such fields without
+  having to translate them to shifts and masks.
+
+- Add processor socket/core/thread topology decode and display.  Contributed
+  by Cathy Ji.
+
+- Provide a more user-friendly exception when asking for a CPUID on a
+  non-existent CPU
+
+  Now raises a RuntimeError with a clear error message, rather than a
+  TypeError complaining about the inability to *-splat out a None.
+
+- bits.cpus(): Cache the list of CPUs
+
+  bits.cpus() recomputed the list of CPUs every time, even though it never
+  changed.  Cache it instead.  Particularly relevant for
+  bits.bsp_apicid(), which calls bits.cpus() to produce the entire list
+  only to return the zeroth element.
+
+bits-829
+========
+
+The "lines and pages" release.
+
+- Fix readline for the case of multiple terminals with different sizes
+
+  In particular, this fixes readline when simultaneously outputting to an
+  80x24 serial terminal and an 80x25 VGA terminal.
+
+- readline: Add Ctrl-Z as an alternative EOF
+
+  Useful both for users of Python on Windows and as a workaround for some
+  systems which had trouble recognizing the Ctrl-D key combination.
+
+- Sort and deduplicate readline completions
+
+  Python's rlcompleter generates duplicate completions in arbitrary order,
+  counting on readline to sort and deduplicate them.  Do so in rlcompleter
+  instead.
+
+- Support tab completion of expressions using subscripting with []
+
+- When completing, sort completions starting with '_' last.
+
+  The current completion display goes through completions sequentially,
+  so sort _internal and especially __magic__ methods last.
+
+- Rewrite pydoc's pager to work on a BITS terminal
+
+  pydoc went through various contortions to detect a proper pager,
+  including using the tempfile module (which BITS doesn't have) to create
+  a temporary file that it didn't actually need.  Pull out its ttypager
+  (which almost works as-is) and rework it to run on BITS terminals
+  (plural), with a few enhancements for usability.
+
+- Use the new ttypager to view logs, allowing page-up and quitting
+
+  This one goes out to anyone who has ever viewed a huge logfile and ended
+  up rebooting rather than paging through it all; we felt your pain.
+
+- README.txt: Rewrap to 77 character columns to avoid triggering GRUB word wrap
+
+- Use the new pager to show README.txt
+
+bits-819
+========
+
+- Add a "python" command to invoke the Python interactive interpreter
+
+  This will launch the normal Python REPL, making it possible to run
+  multi-line commands, nested compound commands, and run expressions
+  having both single and double quotes without worrying about GRUB
+  quoting.  And there was much rejoicing.
+
+- readline: Support the completer interface, and make tab complete
+
+  Tab completes by default, without needing to explicitly bind it with
+  something like readline.parse_and_bind("tab: complete") (which is a
+  no-op for compatibility).
+
+  The completion interface currently cycles through possible completions,
+  rather than listing possible completions.  The list behavior may become
+  available as a configurable option in the future.
+
+- Add the Python rlcompleter module, and use it by default.
+
+  Note that rlcompleter will evaluate Python expressions as it completes
+  them.  However, this matches the recent change to the defaults of
+  upstream Python 3, which enables completion by default as well.
+
+- readline: Signify EOF by returning an empty string, not by raising EOFError
+
+  Python generates an EOF internally when the readline function returns an
+  empty string.  This fixes the ability to exit.
+
+- python: Define the builtin help() function.
+
+- Support the Python math module
+
+  This incorporates additional math functions from fdlibm, as well as
+  some implementations supplied by Python.
+
+- Add a new bits.pyfs_file class representing a StringIO-backed temporary file
+  in the (python) filesystem.
+
+- Port redirect to use the new pyfs_file abstraction
+
+- testsuite: Simplify test config file generation, and only generate it once
+
+  Previously, testsuite regenerated the config files after each call to
+  add_test.
+
+bits-807
+========
+
+- Support a configurable set of operations in batch mode
+
+  The batch option in bits-cfg.txt now takes a list of keywords for
+  different batch-mode operations.  "test" runs the full BITS testsuite as
+  the previous batch mode did.  The new "acpi" and "smbios" keywords dump
+  all structures of the corresponding type.
+
+- Add a Python implementation of readline
+
+  Implements most of the standard line-editing keybindings, as well as
+  history, and a stub completer interface for compatibility with the
+  Python readline module.
+
+  Also add a new "pager" module with context managers to enable and
+  disable the pager, needed as part of readline (which handles the
+  characters<->screen mapping itself).
+
+- Use the new Python readline as the default readline for raw_input()
+
+  Note that Python will only invoke this readline from raw_input() if
+  sys.stdin and sys.stdout refer to the screen directly.  By default, BITS
+  captures stdout to the log, causing Python to ignore this readline and
+  use its own, which does not support line editing, echo characters to
+  the screen, or respond to the enter key (use ctrl-J).  To use this
+  readline implementation, wrap the code invoking raw_input in a
+  "with redirect.nolog():" context manager block.
+
+- Include the Python debugger, pdb, and supporting modules bdb and cmd.
+
+  Try using pdb.run("statement") or pdb.runeval("expression") from the
+  command line.  If running as part of a function, pass globals=globals()
+  and locals=locals() to use the current context rather than the default
+  top-level context of the Python interpreter.
+
+  You will need to wrap invocations of pdb in "with redirect.nolog():" to
+  allow pdb to use readline.
+
+- Add menu entry to dump all ACPI tables directly to the log
+
+- Python API changes:
+
+  - New context managers redirect.nolog(), redirect.logonly(), and
+    redirect.log() to select whether output goes to the screen only, log only,
+    or both.
+
+    Sending output only to the log makes sense for large info dumps, such as
+    decoding every structure of a certain type.  Sending output only to the
+    screen makes sense for status and progress messages.
+
+  - Add a bits.pyfs_add_static helper to simplify defining static files in the
+    (python) filesystem.
+
+    bits.pyfs_add allows adding arbitrary dynamically generated files, but
+    the new pyfs_add_static simplifies the case where the file will never
+    need to change, allowing the caller to supply the contents as a string,
+    rather than a pair of callbacks.
+
+- Update to ACPICA version 20130418
+
+- Fix -Wmaybe-uninitialized warnings, which show up by default with newer
+  versions of GCC, and which GRUB's use of -Werror turns into build failures.
+  - Turn off -Wmaybe-uninitialized for Python
+  - Backport upstream GRUB patch to avoid -Wmaybe-uninitialized warnings
+
+- Fix a bug that broke batch mode.
+
+bits-793
+========
+
+- Support decoding or dumping the ACPI MPST and PMTT tables
+
+- Formatting fixes and cleanups for ACPI decoding
+
+- Add internal function to dump all ACPI tables
+
+bits-786
+========
+
+- Automatically configure and use a serial console if listed in the ACPI
+  Serial Port Console Redirect (SPCR) table.
+
+  This makes the serial console Just Work on many Intel BIOSes,
+  including those used in many emulated Simics systems, avoiding the
+  need to manually add serial configuration to one of the GRUB
+  configuration files.  In addition, this makes it relatively easy to
+  use a serial console with BITS in KVM, by supplying a manually
+  constructed SPCR with -acpitable.
+
+- Workaround a bug in syslinux 5 that prevented it from booting BITS.
+
+  syslinux 5 through at least 5.10-pre2 fails to boot GRUB's lnxboot.img
+  or any other Linux-kernel-like image that has 0 bytes of protected
+  mode code.  Work around this by concatenating lnxboot.img and core.img
+  rather than loading the latter as an initrd.
+
+- Add decode and display for many more ACPI tables and MADT subtables:
+  - Decode and display the DMAR, HPET, MADT, MCFG, MSCT, SLIT, SPCR, SRAT,
+    and WDDT.
+  - Decode several previously unhandled MADT subtables: I/O APIC, Interrupt
+    Source Override, Non-maskable Interrupt Source (NMI), Local APIC NMI,
+    and Local x2APIC NMI.
+  - For several ACPI structures with enable/disable bits, support printing
+    only enabled fields, to provide more relevant output with BIOSes that
+    disable unused structures rather than omitting them.
+
+- Fix GRUB's handling of the pager environment variable, to always enable
+  the pager when setting pager=1 and disable it otherwise, rather than
+  incrementing and decrementing an internal variable.  The existing
+  behavior required two "set pager=0" to turn off after two "set pager=1",
+  and effectively enabled the pager when running an unmatched "set
+  pager=0" (since -1 is non-zero) and disabled it with a subsequent "set
+  pager=1".
+
+- Work around a bug in the Simics local APIC timer implementation
+
+  In some Simics implementations of the local APIC timer, the current
+  count would not stop at 0 in one-shot mode, but would instead wrap
+  around to 0xFFFFFFFF and keep counting down.  Detect and work around
+  that by also stopping when current count > initial count.
+
+  Without the workaround, the timers used during the INIT/SIPI sequence
+  would not detect completion unless they happened to see the point where
+  the timer passed through 0.
+
+- Update to ACPICA version 20130214.
+
+- acpi: Handle processors encoded as Device objects rather than Processor
+  objects; required for systems with more than 255 processors.
+
+- When testing the _PSS, fail more gracefully if it doesn't exist at all
+
+- Handle systems with up to 384 CPUs (increased from 256).
+
+- Increase preallocated log file size to 512k
+
+bits-767
+========
+
+- Update to ACPICA version 20120913.
+
+bits-763
+========
+
+- Significantly speed up the BITS boot process, by pre-compiling Python
+  code to bytecode.
+
+  BITS previously spent most of its boot time parsing Python source
+  files and compiling them to bytecode.  BITS now compiles its included
+  version of Python for the host system at build time, and uses that to
+  pre-compile all of its Python source files to bytecode.
+
+  This speeds up BITS boot time by a factor of 10 or so: on fast systems
+  boot time goes from seconds to near-instant, and on slow systems from
+  minutes to seconds.
+
+  Since the version of GRUB used by BITS doesn't support file
+  modification times (mtime), our version of fstat always returns an
+  mtime of 0, so the build process patches the mtimes stored in the
+  bytecode files to 0 as well.  Unfortunately, this defeats the usual
+  Python mechanism to check for up-to-date bytecode, so anyone modifying
+  Python scripts directly on the BITS boot media will need to remove the
+  corresponding .pyc files.  However, the recommended procedure of
+  modifying Python files in the BITS source tree and using ./build and
+  ./mkdisk will still work.
+
+- Update to ACPICA version 20120620.
+
+- Update to Python 2.7.3.
+
+- Port the SMI latency test from C to Python.
+
+- Add a variant of SMI latency test with USB disabled.
+
+- Now that all tests have moved over to Python, remove the C test
+  infrastructure.
+
+- Remove the unused C implementation of cpu_freq, previously ported to
+  Python.
+
+- Remove the auto-generated list of C-based GRUB commands provided in
+  the menu and the README.  As functionality has moved from C to Python,
+  this list has become shorter and less useful, and it doesn't
+  substitute for real documentation.
+
+- Improve test log formatting.
+
+- Bugfixes:
+  - Fix the return value of fread.
+  - Fix fgetc to not sign-extend characters 0x80 and above.
+
+bits-750
+========
+
+- Add new Python interfaces to read and write memory.  The new bits.memory
+  function returns a memory buffer as an object, usable with struct.unpack_from
+  for reading and struct.pack_into for writing.  bits.memory_addr returns the
+  address of a memory buffer.
+
+- Add support for SMBIOS:
+  - Print basic BIOS/system identification to the log.
+  - Add an explore menu option to dump raw SMBIOS structures.
+  - Preliminary API for decoding SMBIOS structures.
+
+- Add the Python module uuid.
+
+- Port hardware P-State tests to Python, and make them available on all Nehalem
+  and newer CPUs.
+
+- Add more P-state tests
+  - No duplicate P-states
+  - No duplicate frequencies
+  - Sorted in descending order of power dissipation
+
+- Add a runtime test for ACPI _PSS: transition to the target state and measure
+  the CPU frequency.
+
+- Add a Python function to get the current MWAIT state for a CPU; use it to
+  save and restore MWAIT states around P-state tests that need to modify MWAIT
+  to test turbo.
+    
+- Clean up test detail output logic and APIs.
+
+  Make testsuite.test always return the test result as a bool, rather than
+  using the return value to indicate whether the caller should print
+  detail.  Simplify callers accordingly, now that they no longer need to
+  check the test result separately.
+    
+  Instead, testsuite now remembers the result of the last test, and
+  testsuite.print_detail checks verbosity and that last result, acting as
+  a no-op if the test should not print detail.  This allows most callers
+  to use print_detail unconditionally; callers only need to check the
+  detail level (with the new testsuite.show_detail) if they want to avoid
+  doing expensive computations to produce the detail text.
+    
+- README: Document backported Python patch, and document the remaining patches
+  included in GRUB.
+
+- Fix the GRUB distribution shipped with BITS to actually have the backported
+  patches that README says it does.  This change allows BITS to compile with
+  newer versions of GCC.
+
+- Bugfixes and cleanups:
+  - When printing a cpuid_result, show the registers in hex.
+  - Fix output formatting to wrap each line of detail separately, to avoid
+    breaking pre-formatted text such as tables.
+  - Fix bclk computations in hardware Pstate test.
+  - Factor out memory dumping function from acpi module into a new bits.dumpmem
+    function for use elsewhere.
+
+bits-730
+========
+
+- Add support for saving logs to disk.  
+  - BITS boot media has a preallocated 128k file /boot/bits-log.txt, and BITS
+    can overwrite this file with log data (filling the remainder with newlines
+    for padding).
+  - Show the BITS version at the start of the BITS log.
+  - Show the BSP processor signature and detected CPU at the start of the BITS
+    log.
+
+- To support this new logging, BITS now has support for writing data to files.
+  As long as the file already has the necessary disk blocks preallocated, BITS
+  can overwrite the existing contents of the file.
+    
+- Add a fully automated batch mode, and a configuration file /boot/bits-cfg.txt
+  with which to enable it.  In batch mode, BITS will automatically run all
+  tests and save the log file without requiring any user interaction.
+
+- Add support for C-state residency and USB handoff tests to all Nehalem and
+  newer CPUs.
+    
+- Drop support for trying to take USB back from the BIOS.  It never works on
+  any system, and some systems actually hang when trying.
+
+- runppm: Add support for PPM RCM specification 12.3, with new error code for
+  reporting unsupported processors.
+
+- When a test throws an exception, print the traceback.  Together with logging
+  support, this makes it much easier to debug tests.  (If you ever see such an
+  exception in your test logs, please report it.)
+
+- Add the Python module ConfigParser.
+
+- Bugfixes and cleanups:
+  - When showing CPU information, handle a missing MADT.
+  - Read 3-byte PCI class codes via one 4-byte read rather than a 2-byte and
+    1-byte read.
+  - Handle systems with <255 PCIe busses, by getting start and end bus numbers from MCFG
+  - Skip PCI busses where bus:0:0 does not look like a valid device.
+  - Make MSR blacklists more consistent across CPUs, and add comments on more MSRs.
+  - Support translating ACPICA objects of ACPI_TYPE_POWER to and from Python
+  - Improve ACPI output formatting by wrapping lines.
+  - Drop support for logging to an ACPI table for later retrieval by a booted
+    OS.  Saving logs to disk makes this obsolete.
+
+bits-707
+========
+
+- Update to ACPICA version 20120215.  Update for ACPICA API changes, new
+  source files, and new source layout.
+
+- Update MSR consistency blacklists to include MSRs related to Last
+  Branch Records.
+
+- runppm: Add support for PPM RCM specification 12.2, and support PPM
+  RCM versions with major and minor revisions, so that runppm works with
+  a range of possible versions rather than just one.
+
+- Add an acpi.dumptable() function to dump ACPI tables in hex and ASCII.
+
+- Bugfixes and cleanups:
+  - Fix DMAR table parsing.
+  - Clean up various ACPI structures to use classes based on namedtuple
+    with built-in struct parsing information.
+  - Remove doubled parenthesis in menuentry title for MCFG dump
+
+bits-691
+========
+
+- Fix setting ACPI processor capabilities (via _OSC and _PDC), broken with the
+  changes to bits.get_cpupaths in bits-688.
+
+bits-688
+========
+
+- Test additions and improvements:
+  - Add PSD (P-State Dependency) test for processors which require
+    thread-specific scope for the domain.  This test currently only
+    applies to Jaketown (SandyBridge-EP).
+  - Add tests for _PSS (Pstates).
+  - Modify the SMRR test to recognize and abort if model-specific SMRR
+    registers are used.  The Intel Software Developer's Manual documents
+    two sets of SMRR registers: the architectural IA32_SMRR_PHYS_BASE
+    and IA32_SMRR_PHYS_MASK supported by all recent processors, which
+    smrr_test can test for, and the older model-specific
+    MSR_SMRR_PHYS_BASE and MSR_SMRR_PHYS_MASK, which smrr_test does not
+    implement tests for.  The SMRR test now checks for the latter and
+    stops the test early.
+
+- Support "Run all tests" in submenus, and support tests which run in
+  submenus but not from the top-level "Run all tests".  This allows the
+  creation of special-purpose test groupings (potentially duplicating
+  tests from elsewhere in BITS), such as for specific test checklists.
+
+- Python API additions and improvements:
+  - Add Python API to read and write IO ports.
+  - Add Python API for 64-bit memory reads and writes.
+  - Add methods to the acpi module to parse the _PSD, _PSS, and _CST
+    tables.
+  - testmsr functions now allow specifying highbit and lowbit rather
+    than shift and mask, and adjust printed output accordingly.
+  - Move the Python addr_alignment function to the bits module.
+
+- Port more functionality to Python:
+  - Port legacy PCI operations from C to Python using the new IO port
+    API.
+  - Port PCI Express operations from C to Python.
+  - Port the format command to Python.  In the process, drop support for
+    calling format without passing --dec or --hex, and drop support for
+    hex numbers suffixed by 'h', since no callers used either of those
+    features.
+
+- Remove various C code that became unused with more ports from C to
+  Python.
+
+- Merge the "common" C code duplicated in multiple modules into the
+  bitsutil module to share the same implementation.
+
+- Drop support for faking 64-bit legacy PCI operations via two 32-bit
+  operations.
+
+- Bugfixes:
+  - Fix the docstring for bits.writel to use "dword" rather than "long",
+    for consistency with readl.
+  - bits.socket_index should return None for the socket_index if the
+    acpi_id input parameter is None.
+  - bits.get_cpupaths no longer returns ACPI namepaths for disabled
+    processors.  The ACPI namepaths for processors were already verified
+    to have a status of enabled using ACPICA's AcpiGetObjectInfo().  But
+    if the ACPI _STA() method does not exist (which is often the case
+    for older BIOSes which populate processors in the _PR_ scope instead
+    of the _SB_ scope), AcpiGetObjectInfo() returns a status of Present
+    and Enabled.  Add an additional check to ensure that each processor
+    has a valid ApicId or a valid UID in the MADT.  On systems without
+    an MADT, bits.get_cpupaths just assumes that all CPUs are enabled.
+  - Make the menu entry to run all tests run them in the same order they
+    appear in the test menu, rather than in the arbitrary order of a
+    Python hash.
+  - When running all tests, only print submenu headings if they contain
+    a test.
+  - The Nehalem power management test needs testpci, so import it.
+
+bits-642
+========
+
+- Fix MCFG-based PCI Express init to not fail on systems without MCFG.
+
+bits-640
+========
+
+- The Python acpi.evaluate function can now call ACPI methods which take
+  arguments.  The acpi module now provides unique Python types for each
+  ACPI type, and maps between them for both arguments and return values.
+
+- Dynamically generate the test menu from Python, and add infrastructure
+  to register individual tests, including grouping tests into submenus.
+  This eliminates the need to wire up each new test with a boilerplate
+  GRUB cfg snippet.  More importantly, BITS now has a "Run all standard
+  tests" option, which will run all tests except those which target
+  non-standard system configurations or for which failures might require
+  a reboot.
+
+- Port the majority of BITS tests, commands, and infrastructure from
+  GRUB config files and C functions to Python:
+  - Port the acpi_terminate, msr_available, test_cpuid_consistent,
+    test_msr and test_msr_consistency, test_pci, test_options, and
+    test_summary commands to Python.
+  - Simplify the msr_available command to drop support for the --cpu,
+    $viewpoint, and non-quiet options, all unused in any test script.
+  - Port the CPU-specific MSR consistency tests to Python.
+  - Port the Nehalem and Sandy Bridge power management tests to Python.
+  - Port the SMRR test to Python.
+  - Nehalem and Sandy Bridge power management test suites.
+  - Port CPU frequency detection and display from C to Python.
+  - Delete the C versions of ACPI dissection routines, and the
+    corresponding menu in the Explore menu, in favor of the Python
+    versions.
+  - The Python and C testsuite infrastructures now share verbosity level
+    and test pass/fail counts via the environment, to allow incremental
+    porting.  This will go away when the last of the C tests get ported
+    to Python.
+  - Drop all the corresponding commands and infrastructure from the
+    testsuite and acpica modules.
+  - Remove newly obsoleted GRUB cfg files, and remove much of the
+    infrastructure for loading CPU-specific GRUB cfg files, since none
+    will get reintroduced in the future.
+
+- Update README.Developers.txt for the wonderful world of Python
+  scripting.  In particular, document the most common places to hook in
+  new code.
+
+- Python API improvements:
+  - Automatically export all environment variables set from Python (via
+    os.putenv or os.environ), so that they'll remain present when
+    descending to GRUB submenus.
+  - The acpi module has started introducing better handling for parse
+    errors, by throwing exceptions rather than just silently ignoring
+    malformed tables and structures.
+  - The acpi module now provides functions and types for parsing the
+    MADT and MCFG tables, and the per-CPU _MAT structures.
+  - Add an acpi.dump function for convenient command-line debugging.
+
+- Use the MCFG table to initialize the PCI Express base address, so PCI
+  Express works automatically on most systems without requiring
+  CPU-specific initialization.
+
+- Add support and tests for Jaketown:
+  - MSR consistency test.
+  - Power optimization profile tests.
+
+- Improve Sandy Bridge MSR consistency blacklist, adding
+  MSR_PKG_ENERGY_STATUS, MSR_PP0_ENERGY_STATUS, and MSR 613h.
+
+- Update to ACPICA version 20111123.
+
+- Support adding and removing ACPI _OSI interface strings from Python.
+  Using that support, improve the ACPI OS emulation to support
+  _OSI("Processor Device") when emulating current Windows or supporting
+  all features.
+
+- The explore menu now includes an option to decode and display the
+  MCFG.
+
+- Formatting improvements:
+  - When printing additional details about a test, wrap and indent each
+    line, so that the top-level test messages stand out as headings.
+  - Formatting improvements to ACPI display routines and to the string
+    representations of ACPI types.
+  - Formatting improvements to the "cpu" command.
+
+- Bugfixes:
+  - Propagate the return value of Python-implemented GRUB commands back
+    to GRUB, so that GRUB configuration files can use Python-implemented
+    GRUB commands in conditionals.
+  - GRUB commands accepting MSR numbers now produce an appropriate error
+    when asking for an MSR number larger than 32 bits.
+  - Fix acpi_os.cfg to import the acpi module before calling functions
+    from it.
+  - Fix memory leak of memory read results in testsuite module.  (Not
+    normally relevant since GRUB doesn't normally unload modules or free
+    memory before booting an OS.)
+
+bits-574
+========
+
+- New Python functionality:
+  - Add a usb module, with support for EHCI handoff and showing host
+    controllers
+  - Add a pci module, which currently supports probing for devices by
+    classcode.
+  - The bits module now has functions to read and write memory, as bytes,
+    words, or dwords.
+  - Preliminary support for reading from stdin from Python; sufficient to allow
+    reading individual characters to implement prompts.
+  - New bits.set_mwait function, to set the MWAIT state used internally by BITS
+    to idle CPUs when not in use.
+  - New bits.bclk function, returning the CPU bclk, which indicates the speed
+    of the APIC timer.
+  - bits.cpuid now returns a namedtuple, allowing access to the return value
+    via named fields (.eax, .ebx, .ecx, .edx) as well as positionally.  Use
+    this to clean up various other code.
+  - In grubcmds, add support for registering GRUB commands together with an
+    argparse argument parser.  This extracts the help text and synopsis, to
+    make GRUB's "help" command work.
+
+- Initialize Python and register Python GRUB commands before running other GRUB
+  scripts.  This allows us to implement commands in Python that other GRUB
+  scripts need.
+
+- Port many GRUB commands from C to Python.  Shared state used by both C and
+  Python commands now lives in GRUB environment variables; once all commands
+  have migrated to Python, the environment variables will go away.
+  - brandstring
+  - cpu
+  - cpu_sleep
+  - cpuid32 (now computes and displays the common bits and common mask for each
+    register, highlighting the differences between CPUs)
+  - pci_read and pci_write
+  - pcie_read and pcie_write
+  - rdmsr (now computes and displays the common bits and common mask,
+    highlighting the differences between CPUs)
+  - set_mwait
+  - timer
+  - wrmsr
+
+- Delete some unused GRUB commands:
+  - test_msr_available
+  - test_pci_consistency
+  - test_pcie
+  - testsuite (internal implementation detail)
+
+- Add more Python modules from the standard library:
+  - argparse
+  - gettext
+  - locale
+  - textwrap
+  - timeit
+
+- Make C and Python testsuites share passed/failed counts via environment
+  variables.  This allows incremental migration of test_* commands from C to
+  Python.
+
+- Redirect output from Python to a log before running other Python
+  initialization, to capture any errors that might occur.
+
+- Add some preliminary parsing for the ACPI MCFG table.  In the future, BITS
+  will provide tests for MCFG, and will use it to obtain the PCIe base address.
+
+- Updates to runppm:
+  - Add new error code from PPM RCM v12.1 for reporting locked
+    registers/interfaces.
+  - Only print verbose information when the PPM RCM exits unsuccessfully.  When
+    successful, shut up about it.
+  - On Sandy Bridge family, don't try to use PPM reference code without a
+    compiled copy of the PPM RCM available. The built-in PPM code only has full
+    support for Nehalem family, and eventually the built-in code will go away
+    entirely in favor of the standalone reference code.  We don't want to
+    maintain the same reference code in two places.
+
+- Fix warnings from GCC's new -Wunused-but-set-variable option in the RCM code,
+  and backport upstream GRUB fixes for those warnings in the GRUB codebase.
+  These warnings broke the BITS build with GCC 4.6 and newer.
+
+- Update README.txt for changes to the top-level BITS menu options.
+
+- Update README.Developers.txt with some guidelines for Python code.
+
+- Build system fixes:
+  - Fix name of source archive for fdlibm to use .tar.gz, not just .gz
+  - Check for Python, fdlibm, and ACPICA before trying to build, rather than
+    mysteriously failing later in the build process.
+
+- Bugfixes:
+  - Fix the docstring of bits.wrmsr to document the return value correctly.
+  - Fix ACPI common prefix printing to not print {} at the end of one-CPU lists
+
+bits-511
+========
+
+BITS now logs all of the output from Python-based tests to an in-memory log.
+BITS has a new top-level menu "View and Save Log", from which you can review
+the log, clear it, or save it as a new ACPI table with signature BITS.  Yes,
+BITS has the ability to save log output now.  And there was much rejoicing.
+
+The log includes all output generated from Python scripts in BITS.  It does not
+include non-Python output.  Over time, as more of BITS migrates to Python, the
+log will become more complete.
+
+Saving the log will add a new ACPI table with signature BITS, which will exist
+only until you next boot the system.  That table consists of an ACPI header
+followed by the log file as plain text.  To access the log and save it to disk:
+
+- Boot any OS which can write to disk.
+- Dump the ACPI table with signature BITS to a file.
+- Strip off the ACPI header (the first 36 bytes).
+
+Under Linux, you can save the log data with dd as root:
+
+    dd if=/sys/firmware/acpi/tables/BITS bs=1 skip=36 of=bits.log
+
+BITS now implements a new GRUB device, (python), which can expose arbitrary
+data from Python.  This allows any GRUB command which operates on files to
+operate on arbitrary data provided by Python.  It's *almost* like having a
+writable filesystem.  The new log mechanism uses this filesystem, exposing the
+plain-text log as (python)/log and the version with an ACPI table header as
+(python)/acpilog.  Other future possibilities include:
+
+- Dynamic menus: configfile (python)/menu.cfg
+- Dynamic initramfs: initrd (python)/initramfs.cpio
+
+Python code can add new files to the filesystem via the new function
+bits.pyfs_add.  Be creative!
+
+Other changes in this release:
+
+- Improve the ACPI processor display to show sockets and ACPI scopes.  This
+  helps detect systems which do not properly group all the processors from a
+  single socket in a common ACPI scope; this may become a test in future
+  versions of BITS.
+
+- Fix ACPI OS selection menu to use functions exposed from the acpi module and
+  not the bits module
+
+- Add the standard Python contextlib module.
+
+- Compile Python's built-in modules with docstrings.  pydoc on built-in Python
+  modules should now be more informative.
+
+bits-499
+========
+
+- Support GRUB commands implemented in Python
+
+- Provide a pydoc command
+
+- Include pydoc's data directory, so pydoc works on keywords and topics, not
+  just Python modules and functions
+
+- Add more Python modules from the standard library:
+  - atexit (functions not actually invoked yet, though)
+  - formatter
+  - getopt
+  - logging (but not logging.config or logging.handlers, which want network
+    sockets)
+
+- Fix our implementation of the Python os module to re-export bits of os.path
+  expected for compatibility
+
+- Implement time.localtime and time.struct_time.  localtime uses CMOS time,
+  since we don't have any time zone information available.
+
+- Improvements to the Python acpi module:
+  - Functions to list all available ACPI tables
+  - Expose ACPI-related API from the acpi module, not the bits module
+  - Parsing and output formatting improvements
+
+- In the built-in _bits module, change all internal functions to have '_'
+  prefixes, to hide them from the public bits module
+
+- python testsuite: In generic MSR-handling code, handle GPF and avoid doing
+  math on None
+
+- Add a preliminary test to verify processor bus numbers from discovery
+  algorithm against MSR if available
+
+- Additions to MSR consistency blacklists for Sandy Bridge and Jaketown
+
+bits-474
+========
+
+This release of BITS includes many more modules from the Python standard
+library.  Working Python modules:
+
+- abc
+- array
+- binascii
+- bisect
+- codecs, encodings, and the giant pile of encoding-specific modules
+- collections
+- copy
+- copy_reg
+- difflib
+- dis
+- dummy_thread
+- errno
+- fnmatch
+- functools
+- __future__
+- genericpath
+- heapq
+- inspect
+- itertools
+- keyword
+- linecache
+- opcode
+- operator
+- os.path
+- pkgutil
+- posixpath
+- pprint
+- pydoc (Some features work, requires setting TERM=dumb to prevent it from
+  attempting to exec a pager or create a temporary file.)
+- repr
+- re, sre, and family
+- stat
+- string
+- StringIO and cStringIO
+- strop
+- token
+- tokenize
+- traceback
+- types
+- unittest
+- UserDict
+- warnings
+- weakref
+
+The os, time, and signal modules exist but consist mostly of stubs to make
+other modules work; future versions of BITS will contain more complete versions
+of these modules, but some features will never work in their entirety due to
+lack of corresponding functionality in GRUB (fork, exec, threads, writable
+files, signals...).  Note, though, that os.environ *does* work and can modify
+the GRUB environment.
+
+- Add a py_options command to set Python options (currently Py_VerboseFlag)
+- Start moving some tests over to Python, including the MSR consistency test
+- Support parsing and printing the ACPI DMAR table
+- Decode ACPI tables into Python namedtuple instances rather than just tuples,
+  so that they have field names.
+
+- Update to ACPICA version 20110623.
+- Update to Python 2.7.2
+
+- Actually initialize the FPU with "finit", to get it into a sane state, rather
+  than counting on the BIOS to leave it in such a state.
+
+bits-438
+========
+
+- The BITS Python implementation now supports floating-point. BITS now
+  incorporates fdlibm, the "Freely Distributable libm".
+
+- After running the processor power-management reference code, BITS will now
+  re-initialize ACPICA to make it aware of the new tables.
+
+- The Python-based code for ACPI exploration (available via the explore menu)
+  now includes many improvements to the ACPI decoding and display:
+  - Provide an exploratory menu to allow changing the requested ACPI PPM
+    features, to emulate different OSes.  The underlying functions now support
+    setting the PPM capability flags via _PDC or _OSC.
+  - Improve MADT parsing, and add support for x2APIC.  Support and display
+    mappings between CPU paths, procid/UID, and APICID/x2APICID.
+  - Support CPU detection in Python and provide CPU-specific modules.  Decode
+    CPU-specific MWAIT hints.
+  - Handle more quirks in ACPI decoding, such as methods which return 0 rather
+    than an expected package, or methods which return NULL.
+  - Handle CPUID leaf 0xB not existing.
+  - Print a warning message for an empty _PSS.
+  - Miscellaneous formatting and display improvements.
+
+- Improvements to the built-in "bits" Python module:
+  - Add support for cpuid, wrmsr, PCI, and PCIe
+  - Support retrieving the BSP APIC ID
+  - Improve exception handling, and use exceptions for more types of unexpected errors
+  - Add an acpi_objpaths function to find arbitrary ACPI objects
+
+- Add license header to Python modules
+
+- rcm: Add and handle a new error code for new versions of the PPM reference
+  code.
+
+- NEWS.txt: Formatting fixes in bits-400 Python examples
+
+
+bits-400
+========
+
+This release of BITS incorporates Python.  You can now run Python expressions
+on the command line, and import Python modules from .py files in /boot/python.
+As a demonstration, we have included a port of the ACPI exploratory menu to a
+Python script.
+
+You can run Python expressions from the BITS command line using the new "py"
+command: py 'python expression'.  For example:
+
+py 'print "Hello from Python!"'
+    
+To run larger quantities of Python code, put it in a module in the /boot/python
+directory (included in the default module load path), and import it from a
+Python expression.  For example:
+
+py 'import acpi'
+py 'acpi.display_pss()'
+
+BITS provides a built-in module "bits" which includes some preliminary bindings
+to existing BITS functionality; these bindings will expand significantly in
+subsequent releases, to expose the full functionality currently exposed as GRUB
+commands.  Some examples:
+
+py 'import bits'
+py 'print "TSC: 0x%x" % bits.rdmsr(0, 0x10)'
+py 'print bits.acpi_eval("\\_PR_.CPU0._PSS")'
+py 'print repr(bits.acpi_get_table("APIC"))'
+
+We currently provide a few other built-in modules, including the "struct"
+module for decoding more complex binary structures.  Future releases will
+include more of the Python standard library as needed.
+
+A few notable limitations:
+- Floating-point functions will fail when called.
+- Many file-related functions have limitations based on those of GRUB, and/or
+  things we didn't feel like implementing (such as ungetc and reading from
+  stdin).
+- No dynamic loading of binary modules; only modules built-in at compile time,
+  and Python source modules.
+
+Other changes in this release:
+
+- Bugfixes in the existing ACPI menuentries based on GRUB scripting.
+
+
+bits-392
+========
+
+- Update to ACPICA version 20110413
+    
+- When displaying ACPI processor objects, look up and display the corresponding
+  APIC ID from the MADT
+
+- Support 8-byte PCIe reads and writes, by doing two 4-byte operations
+
+
+bits-386
+========
+
+This release of BITS incorporates the full ACPICA runtime (http://acpica.org/),
+and provides commands to decode power-management ACPI structures; see the new
+"ACPI Exploration" menu under the Explore menu.
+
+- Add a new module incorporating ACPICA, and ship an (unmodified) copy of
+  ACPICA in the BITS distribution.
+
+- Add commands to explore ACPI processors, P-states, C-states, and T-states:
+  - PROCESSOR objects
+  - _CSD (C-State Dependency)
+  - _CST (C-States) 
+  - _PCT (Performance Control)
+  - _PDL (P-State Depth Limit) 
+  - _PPC (Performance Present Capabilities) 
+  - _PSD (P-State Dependency) 
+  - _PSS (Performance Supported States)
+  - _PTC (Processor Throttling Control)
+  - _TDL (T-State Depth Limit) 
+  - _TPC (Throttling Present Capabilities)
+  - _TSD (T-State Dependency)
+  - _TSS (Throttling Supported States)
+
+- README.Developers.txt: Note that BITS requires tofrodos
+
+- build: Copy the .iso to bits-latest.iso for convenience, like the .zip
+
+- Move options to boot an MBR into a separate submenu, and move it lower
+
+- Wordsmithing on menu entry titles
+
+
+bits-372
+========
+
+- The BITS distribution now includes a bootable ISO image for convenience;
+  thanks to deep magic in GRUB, this image also works as a bootable USB disk
+  image.  This image lets you create bootable BITS media more quickly and
+  easily, though the resulting media does not support subsequent modification.
+  For more information, see INSTALL.txt.
+
+- Add documentation in INSTALL.txt for upgrading an existing BITS USB disk by
+  replacing the boot directory, without repeating the entire procedure for
+  making the disk bootable.
+
+- Note that building BITS from source now constructs an .iso image using
+  grub-mkrescue, which requires xorriso.
+
+- Correct the description of the new tests in the previous version of BITS.
+
+
+bits-365
+========
+
+- New tests on the test menu, converted from exploratory options to pass/fail
+  tests:
+    - SMI latency test (requires less than 150 microseconds maximum latency)
+    - C-state residency test (requires at least 85% residency for both core and
+      package C-states)
+
+- Change the default test verbosity level to show detailed information about
+  failures.
+
+- Split out and extend the MSR consistency test for Sandy Bridge EP
+
+- Add a warning to the SMI test that touching the keyboard could affect the
+  results
+
+- Backported a GRUB2 fix making the pager environment variable work correctly
+  (bzr revno 3106)
+
+- Test command improvements:
+    - Support --cpu in test_msr
+    - Add a --quiet option to the cpu command
+    - Improve documentation for cpu --env
+
+- Fun and exciting hacks to make the test_verbose environment variable work
+  properly when set from a submenu
+
+- Various formatting and wordsmithing improvements to test text
+
+bits-344
+========
+
+- Added a Test Verbose Level Menu to the Test Menu. Using this menu, test
+  output can be changed to provide more or less detailed test results. The
+  Test Verbose Level can also be modified via an the "test_verbose"
+  environment variable. By default, Test Verbose forces minimal output
+  including test strings for FAIL only and a summary including the total
+  PASS and FAIL counts.
+
+- Modified the P-state test to determine PASS / FAIL status for each ratio
+  tested. Also moved the P-state test from the Explore menu to the Test
+  menu.
+
+- Modified the cpu_freq function to include a new command line option to
+  prevent screen output (quiet mode) and another to force the measured and
+  adjusted frequency values into environment variables.
+
+- Corrected the SMP library to ignore the APIC delivery status bit in x2APIC
+  mode.
+
+- For Linux-based installations, INSTALL.txt now recommends using the MBR
+  from the Syslinux package.
+
+bits-332
+========
+
+- Update MSR Consistency tests to exclude additional MSRs which may be
+  inconsistent but not indicate issues with BIOS initialization.
+
+- Updated the test_options' command line help to include verbose level
+  definitions and default value.
+
+bits-329
+========
+
+- Fix a bug in the SMI Latency test which caused GPF reset when the SMI Count
+  MSR is unsupported by the processor. Be sure SMI Count MSR read is only read
+  via SMP function to ensure that GPF handling is performed.
+
+bits-327
+========
+
+- Check MSR_SMI_COUNT (0x34) in the SMI test.
+
+- Detect Intel Atom processors
+
+- Add initial MSR consistency check for Atom
+
+- Check package C2 residency on Sandy Bridge
+
+- Use GRUB's "export" command to simplify use of common variables in many
+  configuration scripts.
+
+- Fix typo in install-mbr invocation in INSTALL.txt: it should use a disk
+  device, not a partition device.  Thanks to "hans Bogert, van den" for the
+  report.
+
+- Ship COPYING in the boot/ directory of the .zip distribution, not just in the
+  source code provided in boot/src/bits-*.tar.gz
+
+- Fix script error that impacted availability of C-state residency tests on
+  some systems.
+
+bits-316
+========
+
+- Build process improvements, particularly for builds from release tarballs
+  rather than from the git repository.
+
+- Build with -fno-strict-aliasing; otherwise recent GCC warns about our various
+  exciting pointer manipulations.
+
+bits-310
+========
+
+- Documentation updates.
+
+- Produce a GRUB tarball by hand, rather than using make dist.  In the GRUB
+  snapshot we use (revno 2587), make dist omits various files essential to the
+  build, such as util/import_gcry.py.  As a temporary workaround, generate the
+  GRUB tarball by hand, by making maintainer-clean and then tarring up the GRUB
+  source directory.
+
+bits-307
+========
+
+- Add power management test suite for Sandy Bridge microarchitecture.
+
+- Make build scripts do more autodetection to avoid hardcoding paths to the
+  BITS source and GRUB2 source in $HOME.  Look for GRUB2 source at ../grub
+  relative to the BITS source directory, and support specifying an explicit
+  path via the grub_src environment variable.
+
+- Ship NEWS.txt in the BITS distribution so it ends up on BITS boot media.
+
+bits-300
+========
+
+- Change the syslinux configuration file to use the "append" command rather
+  than the "initrd" command, for compatibility with syslinux releases older
+  than 3.71.  Thanks to Darrick Wong for the report.
+
+- Improvements to the Linux installation instructions for constructing a USB
+  disk.
+
+
+bits-295
+========
+
+- Initial public release of BITS.
