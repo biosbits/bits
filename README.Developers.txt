@@ -69,9 +69,9 @@ Building BITS from source
 BITS incorporates various other projects at build time, via git submodules.  To
 build BITS from git, you need to have all the submodules cloned and checked
 out.  Use "git clone --recursive" when doing the initial clone of BITS, or use
-"git submodule init" and "git submodule update" if you already cloned without
---recursive.  If you obtained BITS via a snapshot tarball, that tarball will
-include the corresponding versions of all of the dependencies.
+"git submodule update --init" if you already cloned without --recursive.  If
+you obtained BITS via a snapshot tarball, that tarball will include the
+corresponding versions of all of the dependencies.
 
 GRUB2 itself has a few build dependencies; review the file "INSTALL" in the
 GRUB2 source code for a full list.  Note that because BITS provides additional
