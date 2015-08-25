@@ -199,6 +199,7 @@ GRUB_MOD_INIT(python)
     __asm__ __volatile__ ("finit");
     Py_DontWriteBytecodeFlag = 1;
     Py_NoSiteFlag = 1;
+    Py_InspectFlag = 1;
     Py_Initialize();
     cmd_py = grub_register_command("python", grub_cmd_python, "\"Python interpreter\"", "Start the standard Python interpreter.");
     cmd_py = grub_register_command("py", grub_cmd_py, "\"Python program\"", "Evaluate Python given on the command line.");
