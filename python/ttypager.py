@@ -3,6 +3,7 @@
 
 import bits
 import contextlib
+import itertools
 import os
 import os.path
 import pager
@@ -120,10 +121,34 @@ def _wrap(str, indent=True):
 def ttypager_wrap(text, indent=True):
     ttypager(_wrap(text, indent))
 
+class ProgressStringIO(object):
+    def __init__(self):
+        self.progress = itertools.cycle('|/-\\')
+        self.gathering = 'Gathering output...'
+        with pager.nopager():
+            with redirect.nolog():
+                sys.stdout.write('\r' + self.gathering)
+        self.sio = StringIO()
+
+    def write(self, s):
+        with pager.nopager():
+            with redirect.nolog():
+                sys.stdout.write('\r' + self.gathering + self.progress.next())
+        self.sio.write(s)
+
+    def getvalue(self):
+        with pager.nopager():
+            with redirect.nolog():
+                sys.stdout.write('\r' + ' ' * (len(self.gathering) + 1) + '\r')
+        return self.sio.getvalue()
+
+    def __getattr__(self, name):
+        return getattr(self.sio, name)
+
 @contextlib.contextmanager
 def page():
     """Capture output to stdout/stderr, and send it through ttypager when done"""
-    out = StringIO()
+    out = ProgressStringIO()
     with redirect._redirect_stdout(out):
         with redirect._redirect_stderr(out):
             try:
