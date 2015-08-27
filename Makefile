@@ -107,7 +107,7 @@ common-modules:=fat part_msdos part_gpt iso9660
 
 build-grub-%: autogen-grub
 	$(Q)mkdir '$(workdir)/grub-build-$*'
-	$(Q)cd '$(workdir)/grub-build-$*' && '$(grub-src)/configure' --prefix='$(grub-prefix)' --libdir='$(grub-libdir)' --program-prefix= --target=$(firstword $(subst -, ,$*)) --with-platform=$(lastword $(subst -, ,$*)) --disable-nls --disable-efiemu --disable-grub-emu-usb --disable-grub-emu-sdl --disable-grub-mkfont --disable-grub-mount --disable-device-mapper --disable-libzfs MAKEINFO=/bin/true
+	$(Q)cd '$(workdir)/grub-build-$*' && '$(grub-src)/configure' --prefix='$(grub-prefix)' --libdir='$(grub-libdir)' --program-prefix= --target=$(firstword $(subst -, ,$*)) --with-platform=$(lastword $(subst -, ,$*)) --disable-nls --disable-efiemu --disable-grub-emu-usb --disable-grub-emu-sdl --disable-grub-mkfont --disable-grub-mount --disable-device-mapper --disable-libzfs MAKEINFO=/bin/true TARGET_CFLAGS='-Os -Wno-discarded-array-qualifiers'
 	$(Q)cd '$(workdir)/grub-build-$*' && $(MAKE) install
 	$(Q)mkdir -p '$(target)/boot/grub/$*'
 	$(Q)for suffix in img lst mod ; do \
