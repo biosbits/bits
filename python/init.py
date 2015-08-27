@@ -1,4 +1,4 @@
-# Copyright (c) 2014, Intel Corporation
+# Copyright (c) 2015, Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -28,54 +28,68 @@
 
 """Python initialization, to run at BITS startup."""
 
-def import_start_msg(modname):
-    print "Importing {} module...".format(modname),
+import _bits
 
-def end_msg():
-    print "done"
+start = _bits._time()
 
-def init_start_msg(modname, oneline=True):
-    if oneline:
-        print "Initializing {} module...".format(modname),
-    else:
-        print "Initializing {} module...".format(modname)
+def current_time():
+    global start
+    return _bits._time()-start
 
-def init_end_msg(modname):
-    print "Initialization {} module done".format(modname)
+def time_prefix():
+    return "[{:02.02f}]".format(current_time())
+
+class import_annotation(object):
+    def __init__(self, modname):
+        self.modname = modname
+
+    # Context management protocol
+    def __enter__(self):
+        print "{} Import {}".format(time_prefix(), self.modname)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print "{} Import {} done".format(time_prefix(), self.modname)
+
+class init_annotation(object):
+    def __init__(self, modname):
+        self.modname = modname
+
+    # Context management protocol
+    def __enter__(self):
+        print "{} Init {}".format(time_prefix(), self.modname)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print "{} Init {} done".format(time_prefix(), self.modname)
 
 def early_init():
     # Set up redirection first, before importing anything else, so that any
     # errors in subsequent imports will get captured into the log.
-    import_start_msg("redirect")
-    import redirect
-    end_msg()
-    init_start_msg("redirect")
-    redirect.redirect()
-    init_end_msg("redirect")
+    with import_annotation("redirect"):
+        import redirect
+    with init_annotation("redirect"):
+        redirect.redirect()
 
     # Parse the ACPI SPCR and automatically set up the serial port if present
-    serial_cmd = "false"
-    try:
-        import_start_msg("acpi")
-        import acpi
-        end_msg()
-        init_start_msg("serial port redirection", False)
-        spcr = acpi.parse_table("SPCR")
-        if spcr is not None:
-            addr = spcr.base_address
-            speed = acpi.baud.get(spcr.baud_rate)
-            if addr.address_space_id == acpi.ASID_SYSTEM_IO and addr.register_bit_width == 8 and addr.address != 0 and speed is not None:
-                port = addr.address
-                serial_cmd = "serial --port={:#x} --speed={}".format(port, speed)
-    except Exception as e:
-        print "Error parsing Serial Port Console Redirect (SPCR) table:"
-        print e
-    init_end_msg("serial port redirection")
+    with init_annotation("serial port redirection"):
+        serial_cmd = "false"
+        try:
+            with import_annotation("acpi"):
+                import acpi
+            spcr = acpi.parse_table("SPCR")
+            if spcr is not None:
+                addr = spcr.base_address
+                speed = acpi.baud.get(spcr.baud_rate)
+                if addr.address_space_id == acpi.ASID_SYSTEM_IO and addr.register_bit_width == 8 and addr.address != 0 and speed is not None:
+                    port = addr.address
+                    serial_cmd = "serial --port={:#x} --speed={}".format(port, speed)
+        except Exception as e:
+            print "Error parsing Serial Port Console Redirect (SPCR) table:"
+            print e
 
-    import_start_msg("os")
-    import os
-    end_msg()
-    os.environ["serial_cmd"] = serial_cmd
+    with import_annotation("os"):
+        import os
+    with init_annotation("os"):
+        os.environ["serial_cmd"] = serial_cmd
 
 pydoc_initialized = False
 
@@ -104,120 +118,106 @@ class _Helper(object):
             return pydoc.help(*args, **kwds)
 
 def init():
-    import_start_msg("bitsconfig")
-    import bitsconfig
-    end_msg()
-    init_start_msg("bitsconfig")
-    bitsconfig.init()
-    end_msg()
+    with import_annotation("bitsconfig"):
+        import bitsconfig
+    with init_annotation("bitsconfig"):
+        bitsconfig.init()
 
-    import_start_msg("grubcmds")
-    import grubcmds
-    end_msg()
-    init_start_msg("grubcmds")
-    grubcmds.register()
-    end_msg()
+    with import_annotation("grubcmds"):
+        import grubcmds
+    with init_annotation("grubcmds"):
+        grubcmds.register()
 
-    import_start_msg("bits")
-    import bits
-    end_msg()
-    import os
-    import sys
-    try:
-        import acpi
-        init_start_msg("PCI Express MCFG detection", False)
-        mcfg = acpi.parse_table("MCFG")
-        if mcfg is None:
-            print 'No ACPI MCFG Table found. This table is required for PCI Express.'
-        else:
-            for mcfg_resource in mcfg.resources:
-                if mcfg_resource.segment == 0:
-                    if mcfg_resource.address >= (1 << 32):
-                        print "Error: PCI Express base above 32 bits is unsupported by BITS"
-                        break
-                    bits.pcie_set_base(mcfg_resource.address)
-                    os.putenv('pciexbase', '{:#x}'.format(mcfg_resource.address))
-                    os.putenv('pcie_startbus', '{:#x}'.format(mcfg_resource.start_bus))
-                    os.putenv('pcie_endbus', '{:#x}'.format(mcfg_resource.end_bus))
-                    break
+    with import_annotation("bits"):
+        import bits
+
+    with import_annotation("os"):
+        import os
+
+    with import_annotation("sys"):
+        import sys
+
+    with init_annotation("PCI Express MCFG detection"):
+        try:
+            import acpi
+            mcfg = acpi.parse_table("MCFG")
+            if mcfg is None:
+                print 'No ACPI MCFG Table found. This table is required for PCI Express.'
             else:
-                print "Error initializing PCI Express base from MCFG: no resource with segment 0"
-    except Exception as e:
-        print "Error occurred initializing PCI Express base from MCFG:"
-        print e
-    init_end_msg("PCI Express MCFG detection")
+                for mcfg_resource in mcfg.resources:
+                    if mcfg_resource.segment == 0:
+                        if mcfg_resource.address >= (1 << 32):
+                            print "Error: PCI Express base above 32 bits is unsupported by BITS"
+                            break
+                        bits.pcie_set_base(mcfg_resource.address)
+                        os.putenv('pciexbase', '{:#x}'.format(mcfg_resource.address))
+                        os.putenv('pcie_startbus', '{:#x}'.format(mcfg_resource.start_bus))
+                        os.putenv('pcie_endbus', '{:#x}'.format(mcfg_resource.end_bus))
+                        break
+                else:
+                    print "Error initializing PCI Express base from MCFG: no resource with segment 0"
+        except Exception as e:
+            print "Error occurred initializing PCI Express base from MCFG:"
+            print e
 
-    import_start_msg("readline")
-    import readline
-    end_msg()
-    init_start_msg("readline")
-    readline.init()
-    end_msg()
-    import_start_msg("rlcompleter_extra")
-    import rlcompleter_extra
-    end_msg()
+    with import_annotation("readline"):
+        import readline
+    with init_annotation("readline"):
+        readline.init()
+    with import_annotation("rlcompleter_extra"):
+        import rlcompleter_extra
 
-    import_start_msg("testacpi")
-    import testacpi
-    end_msg()
-    init_start_msg("testacpi")
-    testacpi.register_tests()
-    end_msg()
+    with import_annotation("testacpi"):
+        import testacpi
+    with init_annotation("testacpi"):
+        testacpi.register_tests()
+
     if sys.platform == "BITS-EFI":
-        import_start_msg("testefi")
-        import testefi
-        end_msg()
-        init_start_msg("testefi")
-        testefi.register_tests()
-        end_msg()
-    import_start_msg("testsmrr")
-    import testsmrr
-    end_msg()
-    testsmrr.register_tests()
-    import_start_msg("smilatency")
-    import smilatency
-    end_msg()
-    init_start_msg("smilatency")
-    smilatency.register_tests()
-    end_msg()
-    import_start_msg("mptable")
-    import mptable
-    end_msg()
-    init_start_msg("mptable")
-    mptable.register_tests()
-    end_msg()
-    import_start_msg("cpulib")
-    from cpudetect import cpulib
-    end_msg()
-    init_start_msg("cpulib")
-    cpulib.register_tests()
-    end_msg()
+        with import_annotation("testefi"):
+            import testefi
+        with init_annotation("testefi"):
+            testefi.register_tests()
 
-    import_start_msg("testsuite")
-    import testsuite
-    end_msg()
-    init_start_msg("testsuite")
-    testsuite.finalize_cfgs()
-    end_msg()
-    import_start_msg("sysinfo")
-    import sysinfo
-    end_msg()
-    init_start_msg("sysinfo", False)
-    sysinfo.log_sysinfo()
-    init_end_msg("sysinfo")
-    import_start_msg("smbios")
-    import smbios
-    end_msg()
-    init_start_msg("smbios", False)
-    smbios.log_smbios_info()
-    init_end_msg("smbios")
+    with import_annotation("testsmrr"):
+        import testsmrr
+    with init_annotation("testsmrr"):
+        testsmrr.register_tests()
+
+    with import_annotation("smilatency"):
+        import smilatency
+    with init_annotation("smilatency"):
+        smilatency.register_tests()
+
+    with import_annotation("mptable"):
+        import mptable
+    with init_annotation("mptable"):
+        mptable.register_tests()
+
+    with import_annotation("cpulib"):
+        from cpudetect import cpulib
+    with init_annotation("cpulib"):
+        cpulib.register_tests()
+
+    with import_annotation("testsuite"):
+        import testsuite
+    with init_annotation("testsuite"):
+        testsuite.finalize_cfgs()
+
+    with import_annotation("sysinfo"):
+        import sysinfo
+    with init_annotation("sysinfo"):
+        sysinfo.log_sysinfo()
+
+    with import_annotation("smbios"):
+        import smbios
+    with init_annotation("smbios"):
+        smbios.log_smbios_info()
+
     if sys.platform == "BITS-EFI":
-        import_start_msg("efi")
-        import efi
-        end_msg()
-        init_start_msg("efi", False)
-        efi.log_efi_info()
-        init_end_msg("efi")
+        with import_annotation("efi"):
+            import efi
+        with init_annotation("efi"):
+            efi.log_efi_info()
 
     batch = bitsconfig.config.get("bits", "batch").strip()
     if batch:
@@ -243,28 +243,22 @@ def init():
         print "\nBatch mode complete\n"
         redirect.write_logfile("/boot/bits-log.txt")
 
-    import_start_msg("cpumenu")
-    import cpumenu
-    end_msg()
-    init_start_msg("cpumenu")
-    cpumenu.generate_cpu_menu()
-    end_msg()
+    with import_annotation("cpumenu"):
+        import cpumenu
+    with init_annotation("cpumenu"):
+        cpumenu.generate_cpu_menu()
 
-    import_start_msg("bootmenu")
-    import bootmenu
-    end_msg()
-    init_start_msg("bootmenu")
-    bootmenu.generate_boot_menu()
-    end_msg()
+    with import_annotation("bootmenu"):
+        import bootmenu
+    with init_annotation("bootmenu"):
+        bootmenu.generate_boot_menu()
 
-    import_start_msg("mwaitmenu")
-    import mwaitmenu
-    end_msg()
-    init_start_msg("mwaitmenu")
-    mwaitmenu.generate_mwait_menu()
-    end_msg()
+    with import_annotation("mwaitmenu"):
+        import mwaitmenu
+    with init_annotation("mwaitmenu"):
+        mwaitmenu.generate_mwait_menu()
 
-    import_start_msg("builtin")
-    import __builtin__
-    end_msg()
-    __builtin__.help = _Helper()
+    with import_annotation("__builtin__"):
+        import __builtin__
+    with init_annotation("__builtin__"):
+        __builtin__.help = _Helper()
