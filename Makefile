@@ -231,6 +231,7 @@ pylibs:=\
 	repr.py \
 	rlcompleter.py \
 	shlex.py \
+	socket.py \
 	sre_compile.py \
 	sre_constants.py \
 	sre_parse.py \

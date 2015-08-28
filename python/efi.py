@@ -144,7 +144,9 @@ class Protocol(bits.cdata.Struct):
     @classmethod
     def from_handle(cls, handle):
         """Retrieve an instance of this protocol from an EFI handle"""
-        return cls.from_address(get_protocol(handle, cls.guid))
+        p = cls.from_address(get_protocol(handle, cls.guid))
+        p._handle = handle
+        return p
 
 ptrsize = sizeof(c_void_p)
 
@@ -176,6 +178,7 @@ else:
 
 # Define UEFI data types
 BOOLEAN = c_bool
+CHAR8 = c_char
 CHAR16 = c_wchar
 EFI_BROWSER_ACTION = c_ulong
 EFI_BROWSER_ACTION_REQUEST = c_ulong
@@ -580,6 +583,36 @@ class EFI_SYSTEM_TABLE(bits.cdata.Struct):
 
 system_table = EFI_SYSTEM_TABLE.from_address(_efi._system_table)
 
+TPL_APPLICATION = 4
+TPL_CALLBACK = 8
+TPL_NOTIFY = 16
+TPL_HIGH_LEVEL = 31
+
+EVT_TIMER = 0x80000000
+EVT_RUNTIME = 0x40000000
+EVT_NOTIFY_WAIT = 0x100
+EVT_NOTIFY_SIGNAL = 0x200
+
+def _event_callback_set_bool(event, context):
+    cast(context, POINTER(c_bool)).contents.value = True
+
+event_callback_set_bool = EFI_EVENT_NOTIFY(_event_callback_set_bool)
+
+class event_signal(object):
+    """A wrapper around an EFI_EVENT of type EVT_NOTIFY_SIGNAL
+
+    Used for cases that should busy-loop calling some function until complete.
+
+    The caller must ensure that the event does not get signaled after the
+    event_signal gets destroyed."""
+    def __init__(self):
+        self.event = EFI_EVENT()
+        self.status = c_bool(False)
+        check_status(system_table.BootServices.contents.CreateEvent(EVT_NOTIFY_SIGNAL, TPL_CALLBACK, event_callback_set_bool, pointer(self.status), byref(self.event)))
+
+    def __del__(self):
+        check_status(system_table.BootServices.contents.CloseEvent(self.event))
+
 class EFI_LOADED_IMAGE_PROTOCOL(Protocol):
     """EFI Loaded Image Protocol"""
     guid = EFI_LOADED_IMAGE_PROTOCOL_GUID
@@ -819,6 +852,363 @@ EFI_FILE_RESERVED = 0x0000000000000008
 EFI_FILE_DIRECTORY = 0x0000000000000010
 EFI_FILE_ARCHIVE = 0x0000000000000020
 
+def make_service_binding_protocol(name):
+    """Create a protocol class for an EFI_SERVICE_BINDING_PROTOCOL
+
+    name should be the name of the class without the leading EFI_ or trailing
+    _SERVICE_BINDING_PROTOCOL.  The corresponding GUID and child protocol
+    should already exist."""
+    sbp_name = "EFI_{}_SERVICE_BINDING_PROTOCOL".format(name)
+    guid = globals()[sbp_name + "_GUID"]
+    cls = type(sbp_name, (Protocol,), dict(guid=guid))
+    cls._fields_ = [
+        ('CreateChild', FUNC(POINTER(cls), POINTER(EFI_HANDLE))),
+        ('DestroyChild', FUNC(POINTER(cls), EFI_HANDLE)),
+    ]
+    child_protocol = globals()["EFI_{}_PROTOCOL".format(name)]
+    def child(self):
+        handle = EFI_HANDLE()
+        check_status(self.CreateChild(self, byref(handle)))
+        return child_protocol.from_handle(handle)
+
+    cls.child = child
+    globals()[sbp_name] = cls
+
+class EFI_IPv4_ADDRESS(bits.cdata.Struct):
+    _fields_ = [
+        ('Addr', UINT8*4),
+    ]
+
+    def __str__(self):
+        return "{}.{}.{}.{}".format(*self.Addr)
+
+class EFI_IP4_CONFIG_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('DefaultProtocol', UINT8),
+        ('AcceptAnyProtocol', BOOLEAN),
+        ('AcceptIcmpErrors', BOOLEAN),
+        ('AcceptBroadcast', BOOLEAN),
+        ('AcceptPromiscuous', BOOLEAN),
+        ('UseDefaultAddress', BOOLEAN),
+        ('StationAddress', EFI_IPv4_ADDRESS),
+        ('SubnetMask', EFI_IPv4_ADDRESS),
+        ('TypeOfService', UINT8),
+        ('TimeToLive', UINT8),
+        ('DoNotFragment', BOOLEAN),
+        ('RawData', BOOLEAN),
+        ('ReceiveTimeout', UINT32),
+        ('TransmitTimeout', UINT32),
+    ]
+
+class EFI_IP4_ROUTE_TABLE(bits.cdata.Struct):
+    _fields_ = [
+        ('SubnetAddress', EFI_IPv4_ADDRESS),
+        ('SubnetMask', EFI_IPv4_ADDRESS),
+        ('GatewayAddress', EFI_IPv4_ADDRESS),
+    ]
+
+class EFI_IP4_IPCONFIG_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('StationAddress', EFI_IPv4_ADDRESS),
+        ('SubnetMask', EFI_IPv4_ADDRESS),
+        ('RouteTableSize', UINT32),
+        ('RouteTable', POINTER(EFI_IP4_ROUTE_TABLE)),
+    ]
+
+class EFI_IP4_ICMP_TYPE(bits.cdata.Struct):
+    _fields_ = [
+        ('Type', UINT8),
+        ('Code', UINT8),
+    ]
+
+class EFI_IP4_MODE_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('IsStarted', BOOLEAN),
+        ('MaxPacketSize', UINT32),
+        ('ConfigData', EFI_IP4_CONFIG_DATA),
+        ('IsConfigured', BOOLEAN),
+        ('GroupCount', UINT32),
+        ('GroupTable', POINTER(EFI_IPv4_ADDRESS)),
+        ('RouteCount', UINT32),
+        ('RouteTable', POINTER(EFI_IP4_ROUTE_TABLE)),
+        ('IcmpTypeCount', UINT32),
+        ('IcmpTypeList', POINTER(EFI_IP4_ICMP_TYPE)),
+    ]
+
+class EFI_IP4_CONFIG_PROTOCOL(Protocol):
+    guid = EFI_IP4_CONFIG_PROTOCOL_GUID
+
+EFI_IP4_CONFIG_PROTOCOL._fields_ = [
+    ('Start', FUNC(POINTER(EFI_IP4_CONFIG_PROTOCOL), EFI_EVENT, EFI_EVENT)),
+    ('Stop', FUNC(POINTER(EFI_IP4_CONFIG_PROTOCOL))),
+    ('GetData', FUNC(POINTER(EFI_IP4_CONFIG_PROTOCOL), POINTER(UINTN), POINTER(EFI_IP4_IPCONFIG_DATA))),
+]
+
+class EFI_MAC_ADDRESS(bits.cdata.Struct):
+    _fields_ = [
+        ('Addr', UINT8*32),
+    ]
+
+class EFI_DNS4_CACHE_ENTRY(bits.cdata.Struct):
+    _fields_ = [
+        ('HostName', c_wchar_p),
+        ('IpAddress', POINTER(EFI_IPv4_ADDRESS)),
+        ('Timeout', UINT32),
+    ]
+
+class EFI_DNS4_CONFIG_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('DnsServerListCount', UINTN),
+        ('DnsServerList', POINTER(EFI_IPv4_ADDRESS)),
+        ('UseDefaultSetting', BOOLEAN),
+        ('EnableDnsCache', BOOLEAN),
+        ('Protocol', UINT8),
+        ('StationIp', EFI_IPv4_ADDRESS),
+        ('SubnetMask', EFI_IPv4_ADDRESS),
+        ('LocalPort', UINT16),
+        ('RetryCount', UINT32),
+        ('RetryInterval', UINT32),
+    ]
+
+class EFI_DNS4_MODE_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('DnsConfigData', EFI_DNS4_CONFIG_DATA),
+        ('DnsServerCount', UINT32),
+        ('DnsServerList', POINTER(EFI_IPv4_ADDRESS)),
+        ('DnsCacheCount', UINT32),
+        ('DnsCacheList', POINTER(EFI_DNS4_CACHE_ENTRY)),
+    ]
+
+class DNS_HOST_TO_ADDR_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('IpCount', UINT32),
+        ('IpList', POINTER(EFI_IPv4_ADDRESS)),
+    ]
+
+class DNS_ADDR_TO_HOST_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('HostName', c_wchar_p),
+    ]
+
+class DNS_RESOURCE_RECORD(bits.cdata.Struct):
+    _fields_ = [
+        ('QName', c_char_p),
+        ('QType', UINT16),
+        ('QClass', UINT16),
+        ('TTL', UINT32),
+        ('DataLength', UINT16),
+        ('RData', POINTER(CHAR8)),
+    ]
+
+class DNS_GENERAL_LOOKUP_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('RRCount', UINTN),
+        ('RRList', POINTER(DNS_RESOURCE_RECORD)),
+    ]
+
+class EFI_DNS4_RSP_DATA(bits.cdata.Union):
+    _fields_ = [
+        ('H2AData', POINTER(DNS_HOST_TO_ADDR_DATA)),
+        ('A2HData', POINTER(DNS_ADDR_TO_HOST_DATA)),
+        ('GLookupData', POINTER(DNS_GENERAL_LOOKUP_DATA)),
+    ]
+
+class EFI_DNS4_COMPLETION_TOKEN(bits.cdata.Struct):
+    _fields_ = [
+        ('Event', EFI_EVENT),
+        ('Status', EFI_STATUS),
+        ('RetryCount', UINT32),
+        ('RetryInterval', UINT32),
+        ('RspData', EFI_DNS4_RSP_DATA),
+    ]
+
+class EFI_DNS4_PROTOCOL(Protocol):
+    guid = EFI_DNS4_PROTOCOL_GUID
+
+EFI_DNS4_PROTOCOL._fields_ = [
+    ('GetModeData', FUNC(POINTER(EFI_DNS4_PROTOCOL), POINTER(EFI_DNS4_MODE_DATA))),
+    ('Configure', FUNC(POINTER(EFI_DNS4_PROTOCOL), POINTER(EFI_DNS4_CONFIG_DATA))),
+    ('HostNameToIp', FUNC(POINTER(EFI_DNS4_PROTOCOL), c_wchar_p, POINTER(EFI_DNS4_COMPLETION_TOKEN))),
+    ('IpToHostName', FUNC(POINTER(EFI_DNS4_PROTOCOL), EFI_IPv4_ADDRESS, POINTER(EFI_DNS4_COMPLETION_TOKEN))),
+    ('GeneralLookUp', FUNC(POINTER(EFI_DNS4_PROTOCOL), c_char_p, UINT16, UINT16, POINTER(EFI_DNS4_COMPLETION_TOKEN))),
+    ('UpdateDnsCache', FUNC(POINTER(EFI_DNS4_PROTOCOL), BOOLEAN, BOOLEAN, EFI_DNS4_CACHE_ENTRY)),
+    ('Poll', FUNC(POINTER(EFI_DNS4_PROTOCOL))),
+    ('Cancel', FUNC(POINTER(EFI_DNS4_PROTOCOL), POINTER(EFI_DNS4_COMPLETION_TOKEN))),
+]
+
+make_service_binding_protocol("DNS4")
+
+EFI_TCP4_CONNECTION_STATE = UINT32
+tcp4_connection_states = {
+    0: 'Tcp4StateClosed',
+    1: 'Tcp4StateListen',
+    2: 'Tcp4StateSynSent',
+    3: 'Tcp4StateSynReceived',
+    4: 'Tcp4StateEstablished',
+    5: 'Tcp4StateFinWait1',
+    6: 'Tcp4StateFinWait2',
+    7: 'Tcp4StateClosing',
+    8: 'Tcp4StateTimeWait',
+    9: 'Tcp4StateCloseWait',
+    10: 'Tcp4StateLastAck',
+}
+globals().update(map(reversed, tcp4_connection_states.iteritems()))
+
+class EFI_TCP4_ACCESS_POINT(bits.cdata.Struct):
+    _fields_ = [
+        ('UseDefaultAddress', BOOLEAN),
+        ('StationAddress', EFI_IPv4_ADDRESS),
+        ('SubnetMask', EFI_IPv4_ADDRESS),
+        ('StationPort', UINT16),
+        ('RemoteAddress', EFI_IPv4_ADDRESS),
+        ('RemotePort', UINT16),
+        ('ActiveFlag', BOOLEAN),
+    ]
+
+class EFI_TCP4_OPTION(bits.cdata.Struct):
+    _fields_ = [
+        ('ReceiveBufferSize', UINT32),
+        ('SendBufferSize', UINT32),
+        ('MaxSynBackLog', UINT32),
+        ('ConnectionTimeout', UINT32),
+        ('DataRetries', UINT32),
+        ('FinTimeout', UINT32),
+        ('TimeWaitTimeout', UINT32),
+        ('KeepAliveProbes', UINT32),
+        ('KeepAliveTime', UINT32),
+        ('KeepAliveInterval', UINT32),
+        ('EnableNagle', BOOLEAN),
+        ('EnableTimeStamp', BOOLEAN),
+        ('EnableWindowScaling', BOOLEAN),
+        ('EnableSelectiveAck', BOOLEAN),
+        ('EnablePathMtuDiscovery', BOOLEAN),
+    ]
+
+class EFI_TCP4_CONFIG_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('TypeOfService', UINT8),
+        ('TimeToLive', UINT8),
+        ('AccessPoint', EFI_TCP4_ACCESS_POINT),
+        ('ControlOption', POINTER(EFI_TCP4_OPTION)),
+    ]
+
+class EFI_MANAGED_NETWORK_CONFIG_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('ReceivedQueueTimeoutValue', UINT32),
+        ('TransmitQueueTimeoutValue', UINT32),
+        ('ProtocolTypeFilter', UINT16),
+        ('EnableUnicastReceive', BOOLEAN),
+        ('EnableMulticastReceive', BOOLEAN),
+        ('EnableBroadcastReceive', BOOLEAN),
+        ('EnablePromiscuousReceive', BOOLEAN),
+        ('FlushQueuesOnReset', BOOLEAN),
+        ('EnableReceiveTimestamps', BOOLEAN),
+        ('DisableBackgroundPolling', BOOLEAN),
+    ]
+
+MAX_MCAST_FILTER_CNT = 16
+
+class EFI_SIMPLE_NETWORK_MODE(bits.cdata.Struct):
+    _fields_ = [
+        ('State', UINT32),
+        ('HwAddressSize', UINT32),
+        ('MediaHeaderSize', UINT32),
+        ('MaxPacketSize', UINT32),
+        ('NvRamSize', UINT32),
+        ('NvRamAccessSize', UINT32),
+        ('ReceiveFilterMask', UINT32),
+        ('ReceiveFilterSetting', UINT32),
+        ('MaxMCastFilterCount', UINT32),
+        ('MCastFilterCount', UINT32),
+        ('MCastFilter', EFI_MAC_ADDRESS * MAX_MCAST_FILTER_CNT),
+        ('CurrentAddress', EFI_MAC_ADDRESS),
+        ('BroadcastAddress', EFI_MAC_ADDRESS),
+        ('PermanentAddress', EFI_MAC_ADDRESS),
+        ('IfType', UINT8),
+        ('MacAddressChangeable', BOOLEAN),
+        ('MultipleTxSupported', BOOLEAN),
+        ('MediaPresentSupported', BOOLEAN),
+        ('MediaPresent', BOOLEAN),
+    ]
+
+class EFI_TCP4_COMPLETION_TOKEN(bits.cdata.Struct):
+    _fields_ = [
+        ('Event', EFI_EVENT),
+        ('Status', EFI_STATUS),
+    ]
+
+class EFI_TCP4_CONNECTION_TOKEN(bits.cdata.Struct):
+    _fields_ = [
+        ('CompletionToken', EFI_TCP4_COMPLETION_TOKEN),
+    ]
+
+class EFI_TCP4_LISTEN_TOKEN(bits.cdata.Struct):
+    _fields_ = [
+        ('CompletionToken', EFI_TCP4_COMPLETION_TOKEN),
+        ('NewChildHandle', EFI_HANDLE),
+    ]
+
+class EFI_TCP4_FRAGMENT_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('FragmentLength', UINT32),
+        ('FragmentBuffer', c_void_p),
+    ]
+
+# FIXME: Support variable-length array for FragmentTable
+class EFI_TCP4_RECEIVE_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('UrgentFlag', BOOLEAN),
+        ('DataLength', UINT32),
+        ('FragmentCount', UINT32),
+        ('FragmentTable', EFI_TCP4_FRAGMENT_DATA * 1),
+    ]
+
+# FIXME: Support variable-length array for FragmentTable
+class EFI_TCP4_TRANSMIT_DATA(bits.cdata.Struct):
+    _fields_ = [
+        ('Push', BOOLEAN),
+        ('Urgent', BOOLEAN),
+        ('DataLength', UINT32),
+        ('FragmentCount', UINT32),
+        ('FragmentTable', EFI_TCP4_FRAGMENT_DATA * 1),
+    ]
+
+class EFI_TCP4_RECEIVE_TRANSMIT_DATA(bits.cdata.Union):
+    _fields_ = [
+        ('RxData', POINTER(EFI_TCP4_RECEIVE_DATA)),
+        ('TxData', POINTER(EFI_TCP4_TRANSMIT_DATA)),
+    ]
+
+class EFI_TCP4_IO_TOKEN(bits.cdata.Struct):
+    _fields_ = [
+        ('CompletionToken', EFI_TCP4_COMPLETION_TOKEN),
+        ('Packet', EFI_TCP4_RECEIVE_TRANSMIT_DATA),
+    ]
+
+class EFI_TCP4_CLOSE_TOKEN(bits.cdata.Struct):
+    _fields_ = [
+        ('CompletionToken', EFI_TCP4_COMPLETION_TOKEN),
+        ('AbortOnClose', BOOLEAN),
+    ]
+
+class EFI_TCP4_PROTOCOL(Protocol):
+    guid = EFI_TCP4_PROTOCOL_GUID
+
+EFI_TCP4_PROTOCOL._fields_ = [
+    ('GetModeData', FUNC(POINTER(EFI_TCP4_PROTOCOL), POINTER(EFI_TCP4_CONNECTION_STATE), POINTER(EFI_TCP4_CONFIG_DATA), POINTER(EFI_IP4_MODE_DATA), POINTER(EFI_MANAGED_NETWORK_CONFIG_DATA), POINTER(EFI_SIMPLE_NETWORK_MODE))),
+    ('Configure', FUNC(POINTER(EFI_TCP4_PROTOCOL), POINTER(EFI_TCP4_CONFIG_DATA))),
+    ('Routes', FUNC(POINTER(EFI_TCP4_PROTOCOL), BOOLEAN, POINTER(EFI_IPv4_ADDRESS), POINTER(EFI_IPv4_ADDRESS), POINTER(EFI_IPv4_ADDRESS))),
+    ('Connect', FUNC(POINTER(EFI_TCP4_PROTOCOL), POINTER(EFI_TCP4_CONNECTION_TOKEN))),
+    ('Accept', FUNC(POINTER(EFI_TCP4_PROTOCOL), POINTER(EFI_TCP4_LISTEN_TOKEN))),
+    ('Transmit', FUNC(POINTER(EFI_TCP4_PROTOCOL), POINTER(EFI_TCP4_IO_TOKEN))),
+    ('Receive', FUNC(POINTER(EFI_TCP4_PROTOCOL), POINTER(EFI_TCP4_IO_TOKEN))),
+    ('Close', FUNC(POINTER(EFI_TCP4_PROTOCOL), POINTER(EFI_TCP4_CLOSE_TOKEN))),
+    ('Cancel', FUNC(POINTER(EFI_TCP4_PROTOCOL), POINTER(EFI_TCP4_COMPLETION_TOKEN))),
+    ('Poll', FUNC(POINTER(EFI_TCP4_PROTOCOL))),
+]
+
+make_service_binding_protocol("TCP4")
+
 EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL = 0x00000001
 EFI_OPEN_PROTOCOL_GET_PROTOCOL = 0x00000002
 EFI_OPEN_PROTOCOL_TEST_PROTOCOL = 0x00000004
@@ -896,6 +1286,13 @@ efi_status_decode = {
     EFI_ERROR | 32: 'EFI_INVALID_LANGUAGE',
     EFI_ERROR | 33: 'EFI_COMPROMISED_DATA',
     EFI_ERROR | 34: 'EFI_IP_ADDRESS_CONFLICT',
+    EFI_ERROR | 100: 'EFI_NETWORK_UNREACHABLE',
+    EFI_ERROR | 101: 'EFI_HOST_UNREACHABLE',
+    EFI_ERROR | 102: 'EFI_PROTOCOL_UNREACHABLE',
+    EFI_ERROR | 103: 'EFI_PORT_UNREACHABLE',
+    EFI_ERROR | 104: 'EFI_CONNECTION_FIN',
+    EFI_ERROR | 105: 'EFI_CONNECTION_RESET',
+    EFI_ERROR | 106: 'EFI_CONNECTION_REFUSED',
 }
 
 # Create each of the values above as a constant referring to the corresponding EFI status code.

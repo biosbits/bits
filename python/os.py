@@ -24,6 +24,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+# Portions based on Python's os.py
+
 """OS routines for GRUB."""
 
 import _bits
@@ -122,7 +124,13 @@ from os.path import (curdir, pardir, sep, pathsep, defpath, extsep, altsep, devn
 # _execvpe
 # _exists
 # _exit
-# _get_exports_list
+
+def _get_exports_list(module):
+    try:
+        return list(module.__all__)
+    except AttributeError:
+        return [n for n in dir(module) if n[0] != '_']
+
 # _make_stat_result
 # _make_statvfs_result
 # _pickle_stat_result
