@@ -982,33 +982,33 @@ EFI_LOCATE_SEARCH_TYPE = UINTN
 AllHandles, ByRegisterNotify, ByProtocol = range(3)
 
 def show_available_protocols():
-    # Retrieve the list of all handles from the handle database
-    handle_count = UINTN()
-    handle_buffer = POINTER(EFI_HANDLE)()
-    check_status(system_table.BootServices.contents.LocateHandleBuffer(AllHandles, None, None, byref(handle_count), byref(handle_buffer)))
-    try:
-        handles = [handle_buffer[i] for i in range(handle_count.value)]
-    finally:
-        check_status(system_table.BootServices.contents.FreePool(handle_buffer))
-
-    protocols = set()
-
-    for handle in handles:
-        # Retrieve the list of all the protocols on each handle
-        guids_buffer = POINTER(POINTER(EFI_GUID))()
-        protocol_count = UINTN()
-        check_status(system_table.BootServices.contents.ProtocolsPerHandle(handle, byref(guids_buffer), byref(protocol_count)))
+    with ttypager.page():
+        # Retrieve the list of all handles from the handle database
+        handle_count = UINTN()
+        handle_buffer = POINTER(EFI_HANDLE)()
+        check_status(system_table.BootServices.contents.LocateHandleBuffer(AllHandles, None, None, byref(handle_count), byref(handle_buffer)))
         try:
-            guids = set(guids_buffer[i].contents.uuid for i in range(protocol_count.value))
+            handles = [handle_buffer[i] for i in range(handle_count.value)]
         finally:
-            check_status(system_table.BootServices.contents.FreePool(guids_buffer))
+            check_status(system_table.BootServices.contents.FreePool(handle_buffer))
 
-        protocols |= guids
+        protocols = set()
 
-    print('EFI protocols in use (count={})'.format(len(protocols)))
-    for protocol in sorted(protocols):
-        print(protocol, known_uuids.get(protocol, ''))
-    print()
+        for handle in handles:
+            # Retrieve the list of all the protocols on each handle
+            guids_buffer = POINTER(POINTER(EFI_GUID))()
+            protocol_count = UINTN()
+            check_status(system_table.BootServices.contents.ProtocolsPerHandle(handle, byref(guids_buffer), byref(protocol_count)))
+            try:
+                guids = set(guids_buffer[i].contents.uuid for i in range(protocol_count.value))
+            finally:
+                check_status(system_table.BootServices.contents.FreePool(guids_buffer))
+
+            protocols |= guids
+
+        print('EFI protocols in use (count={})'.format(len(protocols)))
+        for protocol in sorted(protocols):
+            print(protocol, known_uuids.get(protocol, ''))
 
 def save_tables(decode=True):
     """Save all EFI tables to files.
