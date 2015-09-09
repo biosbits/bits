@@ -383,8 +383,8 @@ class SystemEnclosureContainedElement(unpack.Struct):
             0: 'SMBIOS baseboard type enumeration',
             1: 'SMBIOS structure type enumeration',
         }
-        self.add_field('type_select', bitfields.getbits(self.type, 7), unpack.format_table("contained_element_type[7]={}", type_selections))
-        self.add_field('type', bitfields.getbits(self.type, 6, 0))
+        self.add_field('type_select', bitfields.getbits(self.contained_element_type, 7), unpack.format_table("contained_element_type[7]={}", type_selections))
+        self.add_field('type', bitfields.getbits(self.contained_element_type, 6, 0))
         if self.type_select == 0:
             self.add_field('smbios_board_type', self.type, unpack.format_table("{}", _board_types))
         else:
