@@ -82,7 +82,7 @@ def test_mat():
                     if testsuite.test("{} with _MAT x2Apic has x2Apic in MADT".format(cpupath), subtable.uid in uid_x2apicid):
                         testsuite.test("{} x2ApicId derived from MADT using UID = _MAT x2ApicId".format(cpupath), uid_x2apicid[subtable.uid] == subtable.x2apicid)
                         testsuite.print_detail("{} x2ApicId derived from MADT ({:#02x}) != _MAT x2ApicId ({:#02x})".format(cpupath, uid_x2apicid[subtable.uid], subtable.x2apicid))
-                        testsuite.print_detail("_MAT entry[{}]: {}".format(index, x2Apic))
+                        testsuite.print_detail("_MAT entry[{}]: {}".format(index, subtable))
 
 def test_pss():
     uniques = acpi.parse_cpu_method("_PSS")
