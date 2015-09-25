@@ -116,9 +116,8 @@ def test_pss():
 
 def test_pstates():
     """Execute and verify frequency for each Pstate in the _PSS"""
-    with bits.mwait.use_hint():
-        IA32_PERF_CTL = 0x199
-
+    IA32_PERF_CTL = 0x199
+    with bits.mwait.use_hint(), bits.preserve_msr(IA32_PERF_CTL):
         cpupath_procid = acpi.find_procid()
         cpupath_uid = acpi.find_uid()
         apic = acpi.parse_apic()

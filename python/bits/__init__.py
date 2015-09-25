@@ -273,6 +273,23 @@ def cpu_frequency():
     aperf_hz = int( (float(aperf)/mperf) * tsc_delta)
     return mperf_hz, aperf_hz
 
+class preserve_msr(object):
+    """Context manager to preserve the value of an MSR around a block"""
+    def __init__(self, msr):
+        self.msr = msr
+
+    # Context management protocol
+    def __enter__(self):
+        values = {}
+        for cpu in cpus():
+            values[cpu] = rdmsr(cpu, self.msr)
+        self.values = values
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for cpu, value in self.values.iteritems():
+            if value is not None:
+                wrmsr(cpu, self.msr, value)
+
 def print_hz(hz):
     temp = hz / (1000.0 * 1000 * 1000)
     if abs(temp) >= 1:
