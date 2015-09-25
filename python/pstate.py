@@ -45,9 +45,9 @@ def turbo_msr(ratio, min_ratio, max_ratio):
     return ratio << 8
 
 def test_hardware_pstates(ratio_to_control_value):
-    with bits.mwait.use_hint():
+    IA32_PERF_CTL = 0x199
+    with bits.mwait.use_hint(), bits.preserve_msr(IA32_PERF_CTL):
         MSR_PLATFORM_INFO = 0xce
-        IA32_PERF_CTL = 0x199
         min_ratio = testmsr.MSR("maximum efficiency ratio", bits.bsp_apicid(), MSR_PLATFORM_INFO, highbit=47, lowbit=40)[0]
         max_ratio = testmsr.MSR("max non-turbo ratio", bits.bsp_apicid(), MSR_PLATFORM_INFO, highbit=15, lowbit=8)[0]
 
