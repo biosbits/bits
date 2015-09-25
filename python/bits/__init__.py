@@ -236,7 +236,8 @@ def apicid_to_index():
     global cpulist
     return dict([(apicid, i) for (i, apicid) in enumerate(cpulist)])
 
-def cpu_frequency():
+def cpu_frequency(duration=1.0):
+    """Compute the CPU frequency over the given duration (default 1 second)"""
     global cpulist
     IA32_MPERF_MSR = 0xE7
     IA32_APERF_MSR = 0xE8
@@ -262,12 +263,12 @@ def cpu_frequency():
 
     # Needs to busywait, not sleep
     start = time.time()
-    while (time.time() - start < 1):
+    while (time.time() - start < duration):
         pass
 
     mperf = rdmsr(bsp_apicid(), IA32_MPERF_MSR)
     aperf = rdmsr(bsp_apicid(), IA32_APERF_MSR)
-    tsc_delta = rdmsr(bsp_apicid(), IA32_TIME_STAMP_COUNTER_MSR) - tsc_start
+    tsc_delta = (rdmsr(bsp_apicid(), IA32_TIME_STAMP_COUNTER_MSR) - tsc_start) / duration
 
     mperf_hz = tsc_delta
     aperf_hz = int( (float(aperf)/mperf) * tsc_delta)
