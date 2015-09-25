@@ -86,6 +86,8 @@ def test_mat():
 
 def test_pss():
     uniques = acpi.parse_cpu_method("_PSS")
+    # We special-case None here to avoid a double-failure for CPUs without a _PSS
+    testsuite.test("_PSS must be identical for all CPUs", len(uniques) <= 1 or (len(uniques) == 2 and None in uniques))
     for pss, cpupaths in uniques.iteritems():
         if not testsuite.test("_PSS must exist", pss is not None):
             testsuite.print_detail(acpi.factor_commonprefix(cpupaths))
