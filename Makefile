@@ -185,6 +185,7 @@ pylibs:=\
 	abc.py \
 	argparse.py \
 	atexit.py \
+	base64.py \
 	bdb.py \
 	bisect.py \
 	cmd.py \
