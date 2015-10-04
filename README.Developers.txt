@@ -2,8 +2,9 @@ This document, README.Developers.txt, provides documentation useful for the
 prospective BITS developer.  See README.txt for user documentation, or
 INSTALL.txt for instructions on creating a bootable USB disk.
 
-Please send any bug reports, patches, or other mail about BITS to
-Burt Triplett <burt@pbjtriplett.org>.
+Please send any bug reports, patches, or other mail about BITS to the BITS
+mailing list at <bits@lists.01.org>, and please include the git commit ID
+(included in README.txt in BITS builds) for reference.
 
 You can find the BITS homepage at http://biosbits.org/
 

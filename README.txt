@@ -3,8 +3,8 @@
 Build ID: @@BUILDID@@
 Build number: @@BUILDNUM@@
 
-Please send any bug reports, patches, or other mail about BITS to Burt
-Triplett <burt@pbjtriplett.org>, and please include the build ID for
+Please send any bug reports, patches, or other mail about BITS to the BITS
+mailing list, <bits@lists.01.org>, and please include the build ID for
 reference.
 
 You can find the BITS homepage at http://biosbits.org/
