@@ -85,6 +85,10 @@ extern void init_csv(void);
 extern void init_ctypes(void);
 extern void init_functools(void);
 extern void init_heapq(void);
+extern void init_md5(void);
+extern void init_sha(void);
+extern void init_sha256(void);
+extern void init_sha512(void);
 extern void init_sre(void);
 extern void init_struct(void);
 extern void initunicodedata(void);
@@ -139,8 +143,12 @@ struct _inittab _PyImport_Inittab[] = {
 #endif
     {"_functools", init_functools},
     {"_heapq", init_heapq},
+    {"_md5", init_md5},
     {"_pyfs", init_pyfs},
     {"_smp", init_smp_module},
+    {"_sha", init_sha},
+    {"_sha256", init_sha256},
+    {"_sha512", init_sha512},
     {"_sre", init_sre},
     {"_weakref", init_weakref},
 

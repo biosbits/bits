@@ -209,6 +209,7 @@ pylibs:=\
 	getopt.py \
 	gettext.py \
 	glob.py \
+	hashlib.py \
 	heapq.py \
 	inspect.py \
 	keyword.py \
