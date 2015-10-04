@@ -803,8 +803,9 @@ acpi_unsafe_io = c_bool.from_address(_acpi.acpi_unsafe_io)
 def evaluate(pathname, *args, **kwargs):
     """Evaluate an ACPI method and return the result.
 
-    By default, ACPI method evaluation ignores attempts to read or write I/O
-    ports. Pass the keyword argument unsafe_io=True to explicitly allow I/O."""
+    By default, ACPI method evaluation allows reads and writes of I/O ports.
+    Pass the keyword argument unsafe_io=False to silently ignore I/O
+    operations."""
     unsafe_io = kwargs.get("unsafe_io")
     if unsafe_io is not None:
         old_unsafe_io = acpi_unsafe_io.value

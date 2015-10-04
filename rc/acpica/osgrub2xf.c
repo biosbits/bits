@@ -57,7 +57,9 @@
 #define _COMPONENT          ACPI_OS_SERVICES
         ACPI_MODULE_NAME    ("osgrub2xf")
 
-bool acpi_unsafe_io = false;
+/* Default true, because some systems hang in ACPI initialization methods if
+ * IO-triggered SMIs don't occur. */
+bool acpi_unsafe_io = true;
 
 /******************************************************************************
  *
