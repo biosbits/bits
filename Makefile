@@ -211,11 +211,13 @@ pylibs:=\
 	glob.py \
 	hashlib.py \
 	heapq.py \
+	httplib.py \
 	inspect.py \
 	keyword.py \
 	locale.py \
 	linecache.py \
 	logging/__init__.py \
+	mimetools.py \
 	opcode.py \
 	optparse.py \
 	pdb.py \
@@ -229,6 +231,7 @@ pylibs:=\
 	pydoc_data \
 	re.py \
 	repr.py \
+	rfc822.py \
 	rlcompleter.py \
 	shlex.py \
 	socket.py \
@@ -246,6 +249,9 @@ pylibs:=\
 	traceback.py \
 	types.py \
 	unittest \
+	urlparse.py \
+	urllib.py \
+	urllib2.py \
 	UserDict.py \
 	uuid.py \
 	warnings.py \
