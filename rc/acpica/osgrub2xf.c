@@ -46,7 +46,7 @@
 #include <grub/efi/efi.h>
 #endif
 
-#include "bitsutil.h"
+#include "portable.h"
 
 #include "acpi.h"
 #include "accommon.h"
@@ -56,10 +56,6 @@
 
 #define _COMPONENT          ACPI_OS_SERVICES
         ACPI_MODULE_NAME    ("osgrub2xf")
-
-/* Default true, because some systems hang in ACPI initialization methods if
- * IO-triggered SMIs don't occur. */
-bool acpi_unsafe_io = true;
 
 /******************************************************************************
  *
@@ -687,36 +683,11 @@ AcpiOsWritePciConfiguration (
  *
  *****************************************************************************/
 
-ACPI_STATUS
-AcpiOsReadPort (
-    ACPI_IO_ADDRESS         Address,
-    UINT32                  *Value,
-    UINT32                  Width)
+asmlinkage ACPI_STATUS (*AcpiOsReadPort_ptr)(ACPI_IO_ADDRESS Address, UINT32 *Value, UINT32 Width);
+
+ACPI_STATUS AcpiOsReadPort(ACPI_IO_ADDRESS Address, UINT32 *Value, UINT32 Width)
 {
-    unsigned short port = Address;
-
-    switch (Width)
-    {
-    case 8:
-        dprintf("acpica_io", "ACPI: inb(0x%x), unsafe_io=%u\n", port, acpi_unsafe_io);
-        *Value = acpi_unsafe_io ? grub_inb(port) : 0xFF;
-        break;
-
-    case 16:
-        dprintf("acpica_io", "ACPI: inw(0x%x), unsafe_io=%u\n", port, acpi_unsafe_io);
-        *Value = acpi_unsafe_io ? grub_inw(port) : 0xFFFF;
-        break;
-
-    case 32:
-        dprintf("acpica_io", "ACPI: inl(0x%x), unsafe_io=%u\n", port, acpi_unsafe_io);
-        *Value = acpi_unsafe_io ? grub_inl(port) : 0xFFFFFFFF;
-        break;
-
-    default:
-        return (AE_BAD_PARAMETER);
-    }
-
-    return (AE_OK);
+    return AcpiOsReadPort_ptr(Address, Value, Width);
 }
 
 
@@ -734,39 +705,11 @@ AcpiOsReadPort (
  *
  *****************************************************************************/
 
-ACPI_STATUS
-AcpiOsWritePort (
-    ACPI_IO_ADDRESS         Address,
-    UINT32                  Value,
-    UINT32                  Width)
+asmlinkage ACPI_STATUS (*AcpiOsWritePort_ptr)(ACPI_IO_ADDRESS Address, UINT32 Value, UINT32 Width);
+
+ACPI_STATUS AcpiOsWritePort(ACPI_IO_ADDRESS Address, UINT32 Value, UINT32 Width)
 {
-   unsigned short port = Address;
-
-   switch (Width)
-    {
-    case 8:
-        dprintf("acpica_io", "ACPI: outb(value=0x%x, port=0x%x), unsafe_io=%u\n", (unsigned)Value, port, acpi_unsafe_io);
-        if (acpi_unsafe_io)
-            grub_outb((unsigned char)Value, port);
-        break;
-
-    case 16:
-        dprintf("acpica_io", "ACPI: outw(value=0x%x, port=0x%x), unsafe_io=%u\n", (unsigned)Value, port, acpi_unsafe_io);
-        if (acpi_unsafe_io)
-            grub_outw((unsigned short)Value, port);
-        break;
-
-    case 32:
-        dprintf("acpica_io", "ACPI: outl(value=0x%x, port=0x%x), unsafe_io=%u\n", (unsigned)Value, port, acpi_unsafe_io);
-        if (acpi_unsafe_io)
-            grub_outl(Value, port);
-        break;
-
-    default:
-        return (AE_BAD_PARAMETER);
-    }
-
-    return (AE_OK);
+    return AcpiOsWritePort_ptr(Address, Value, Width);
 }
 
 

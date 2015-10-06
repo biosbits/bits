@@ -45,6 +45,8 @@ extern bool acpica_cpus_initialized;
 extern U32 acpica_cpus_init_caps;
 
 asmlinkage bool acpica_early_init(void);
+extern asmlinkage ACPI_STATUS (*AcpiOsReadPort_ptr)(ACPI_IO_ADDRESS Address, UINT32 *Value, UINT32 Width);
+extern asmlinkage ACPI_STATUS (*AcpiOsWritePort_ptr)(ACPI_IO_ADDRESS Address, UINT32 Value, UINT32 Width);
 asmlinkage bool acpica_init(void);
 asmlinkage void acpica_terminate(void);
 bool IsEnabledProcessor(ACPI_HANDLE ObjHandle);

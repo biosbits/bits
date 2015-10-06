@@ -493,6 +493,8 @@ PyMODINIT_FUNC init_acpi_module(void)
     PyModule_AddObject(m, "acpica_early_init", PyLong_FromVoidPtr(acpica_early_init));
     PyModule_AddObject(m, "acpica_init", PyLong_FromVoidPtr(acpica_init));
     PyModule_AddObject(m, "acpica_terminate", PyLong_FromVoidPtr(acpica_terminate));
+    PyModule_AddObject(m, "AcpiOsReadPort_ptr", PyLong_FromVoidPtr(&AcpiOsReadPort_ptr));
+    PyModule_AddObject(m, "AcpiOsWritePort_ptr", PyLong_FromVoidPtr(&AcpiOsWritePort_ptr));
     PyModule_AddObject(m, "ACPI_FREE", PyLong_FromVoidPtr(wrap_ACPI_FREE));
     PyModule_AddObject(m, "AcpiFormatException", PyLong_FromVoidPtr(wrap_AcpiFormatException));
     PyModule_AddObject(m, "AcpiGetHandle", PyLong_FromVoidPtr(wrap_AcpiGetHandle));
@@ -506,6 +508,5 @@ PyMODINIT_FUNC init_acpi_module(void)
     PyModule_AddObject(m, "AcpiRemoveInterface", PyLong_FromVoidPtr(wrap_AcpiRemoveInterface));
     PyModule_AddObject(m, "AcpiSubsystemStatus", PyLong_FromVoidPtr(wrap_AcpiSubsystemStatus));
     PyModule_AddObject(m, "AcpiWalkNamespace", PyLong_FromVoidPtr(wrap_AcpiWalkNamespace));
-    PyModule_AddObject(m, "acpi_unsafe_io", PyLong_FromVoidPtr(&acpi_unsafe_io));
     PyModule_AddObject(m, "ACPI_TYPE_EXTERNAL_MAX", PyLong_FromUnsignedLong(ACPI_TYPE_EXTERNAL_MAX));
 }
