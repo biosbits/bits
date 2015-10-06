@@ -44,7 +44,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern bool acpica_cpus_initialized;
 extern U32 acpica_cpus_init_caps;
 
-bool acpica_early_init(void);
+asmlinkage bool acpica_early_init(void);
 asmlinkage bool acpica_init(void);
 asmlinkage void acpica_terminate(void);
 bool IsEnabledProcessor(ACPI_HANDLE ObjHandle);

@@ -4232,7 +4232,18 @@ def display_uid():
         print "_UID = %s" % uid
     display_acpi_method("_UID", print_uid)
 
+_acpica_early_init = CFUNCTYPE(c_bool)(_acpi.acpica_early_init)
 _acpica_init = CFUNCTYPE(c_bool)(_acpi.acpica_init)
+
+def needs_early_init(f, docstring=""):
+    """Wrap a function that requires minimal ACPICA table-parsing initialization"""
+    def acpica_early_init_wrapper(*args):
+        if not _acpica_early_init():
+            raise RuntimeError("ACPICA module failed minimal initialization.")
+        return f(*args)
+    acpica_early_init_wrapper.__doc__ = docstring
+    return acpica_early_init_wrapper
+
 def needs_init(f, docstring=""):
     """Wrap a function that requires ACPICA initialization"""
     def acpica_init_wrapper(*args):
@@ -4289,10 +4300,10 @@ _AcpiGetObjectInfo_docstring = """Get info about an ACPI object"""
 AcpiGetObjectInfo = needs_init(CFUNCTYPE(ACPI_STATUS, ACPI_HANDLE, POINTER(c_void_p))(_acpi.AcpiGetObjectInfo), _AcpiGetObjectInfo_docstring)
 
 _AcpiGetTable_docstring = """Return table specified by the signature and instance"""
-AcpiGetTable = needs_init(CFUNCTYPE(ACPI_STATUS, ACPI_STRING, UINT32, POINTER(POINTER(TableHeader)))(_acpi.AcpiGetTable), _AcpiGetTable_docstring)
+AcpiGetTable = needs_early_init(CFUNCTYPE(ACPI_STATUS, ACPI_STRING, UINT32, POINTER(POINTER(TableHeader)))(_acpi.AcpiGetTable), _AcpiGetTable_docstring)
 
 _AcpiGetTableByIndex_docstring = """Return table specified by index"""
-AcpiGetTableByIndex = needs_init(CFUNCTYPE(ACPI_STATUS, UINT32, POINTER(POINTER(TableHeader)))(_acpi.AcpiGetTableByIndex), _AcpiGetTableByIndex_docstring)
+AcpiGetTableByIndex = needs_early_init(CFUNCTYPE(ACPI_STATUS, UINT32, POINTER(POINTER(TableHeader)))(_acpi.AcpiGetTableByIndex), _AcpiGetTableByIndex_docstring)
 
 _AcpiOsGetRootPointer_docstring = """Return the address of the ACPI RSDP table"""
 AcpiOsGetRootPointer = needs_init(CFUNCTYPE(c_ulong)(_acpi.AcpiOsGetRootPointer), _AcpiOsGetRootPointer_docstring)

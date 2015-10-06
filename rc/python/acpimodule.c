@@ -490,6 +490,7 @@ static asmlinkage ACPI_STATUS wrap_AcpiWalkNamespace(ACPI_OBJECT_TYPE Type, ACPI
 PyMODINIT_FUNC init_acpi_module(void)
 {
     PyObject *m = Py_InitModule("_acpi", acpiMethods);
+    PyModule_AddObject(m, "acpica_early_init", PyLong_FromVoidPtr(acpica_early_init));
     PyModule_AddObject(m, "acpica_init", PyLong_FromVoidPtr(acpica_init));
     PyModule_AddObject(m, "acpica_terminate", PyLong_FromVoidPtr(acpica_terminate));
     PyModule_AddObject(m, "ACPI_FREE", PyLong_FromVoidPtr(wrap_ACPI_FREE));
