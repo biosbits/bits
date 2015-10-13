@@ -334,3 +334,12 @@ def dumpmem(mem, addr=0):
                 s += '.'
         s += '\n'
     return s
+
+def set_func_ptr(funcptr_ptr, wrapper):
+    """Set a C function pointer to a ctypes-wrapped Python function
+
+    C code should export the address of the function pointer using
+    PyLong_FromVoidPtr. Python code should pass that address as the first
+    argument, and the wrapper as the second argument. Python code must maintain
+    a reference to the wrapper to prevent it from being garbage-collected."""
+    ctypes.c_ulong.from_address(funcptr_ptr).value = ctypes.cast(wrapper, ctypes.c_void_p).value

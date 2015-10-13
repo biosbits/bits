@@ -4293,14 +4293,9 @@ def check_status(status):
     if status:
         raise ACPIException(status)
 
-AcpiOsReadPort_t = CFUNCTYPE(ACPI_STATUS, ACPI_IO_ADDRESS, POINTER(UINT32), UINT32)
-AcpiOsReadPort_ptr = POINTER(AcpiOsReadPort_t).from_address(_acpi.AcpiOsReadPort_ptr)
-AcpiOsWritePort_t = CFUNCTYPE(ACPI_STATUS, ACPI_IO_ADDRESS, UINT32, UINT32)
-AcpiOsWritePort_ptr = POINTER(AcpiOsWritePort_t).from_address(_acpi.AcpiOsWritePort_ptr)
-
 acpi_unsafe_io = True
 
-@AcpiOsReadPort_t
+@CFUNCTYPE(ACPI_STATUS, ACPI_IO_ADDRESS, POINTER(UINT32), UINT32)
 def AcpiOsReadPort(Address, Value, Width):
     if Width == 8:
         Value.contents.value = bits.inb(Address) if acpi_unsafe_io else 0xFF
@@ -4312,7 +4307,7 @@ def AcpiOsReadPort(Address, Value, Width):
         return AE_BAD_PARAMETER
     return AE_OK
 
-@AcpiOsWritePort_t
+@CFUNCTYPE(ACPI_STATUS, ACPI_IO_ADDRESS, UINT32, UINT32)
 def AcpiOsWritePort(Address, Value, Width):
     if not acpi_unsafe_io:
         return AE_OK
@@ -4326,8 +4321,8 @@ def AcpiOsWritePort(Address, Value, Width):
         return AE_BAD_PARAMETER
     return AE_OK
 
-AcpiOsReadPort_ptr.contents = AcpiOsReadPort
-AcpiOsWritePort_ptr.contents = AcpiOsWritePort
+bits.set_func_ptr(_acpi.AcpiOsReadPort_ptrptr, AcpiOsReadPort)
+bits.set_func_ptr(_acpi.AcpiOsWritePort_ptrptr, AcpiOsWritePort)
 
 _AcpiGetHandle_docstring = """Get the object handle associated with an ACPI name"""
 AcpiGetHandle = needs_init(CFUNCTYPE(ACPI_STATUS, ACPI_HANDLE, ACPI_STRING, POINTER(ACPI_HANDLE))(_acpi.AcpiGetHandle), _AcpiGetHandle_docstring)

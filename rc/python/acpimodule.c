@@ -493,8 +493,8 @@ PyMODINIT_FUNC init_acpi_module(void)
     PyModule_AddObject(m, "acpica_early_init", PyLong_FromVoidPtr(acpica_early_init));
     PyModule_AddObject(m, "acpica_init", PyLong_FromVoidPtr(acpica_init));
     PyModule_AddObject(m, "acpica_terminate", PyLong_FromVoidPtr(acpica_terminate));
-    PyModule_AddObject(m, "AcpiOsReadPort_ptr", PyLong_FromVoidPtr(&AcpiOsReadPort_ptr));
-    PyModule_AddObject(m, "AcpiOsWritePort_ptr", PyLong_FromVoidPtr(&AcpiOsWritePort_ptr));
+    PyModule_AddObject(m, "AcpiOsReadPort_ptrptr", PyLong_FromVoidPtr(&AcpiOsReadPort_ptr));
+    PyModule_AddObject(m, "AcpiOsWritePort_ptrptr", PyLong_FromVoidPtr(&AcpiOsWritePort_ptr));
     PyModule_AddObject(m, "ACPI_FREE", PyLong_FromVoidPtr(wrap_ACPI_FREE));
     PyModule_AddObject(m, "AcpiFormatException", PyLong_FromVoidPtr(wrap_AcpiFormatException));
     PyModule_AddObject(m, "AcpiGetHandle", PyLong_FromVoidPtr(wrap_AcpiGetHandle));
