@@ -1321,7 +1321,7 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap);
 #undef WITH_NEXT_FRAMEWORK
 
 /* Define if you want to compile in Python-specific mallocs */
-#undef WITH_PYMALLOC
+#define WITH_PYMALLOC 1
 
 /* Define if you want to compile in rudimentary thread support */
 #undef WITH_THREAD
