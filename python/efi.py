@@ -1701,6 +1701,18 @@ EFI_PCI_IO_PROTOCOL._fields_ = [
     ('RomImage', c_void_p),
 ]
 
+def register_keyboard_interrupt_handler():
+    stiex = EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL.from_handle(system_table.ConsoleInHandle)
+    key_data = EFI_KEY_DATA()
+    key_data.Key.UnicodeChar = c_wchar('c')
+    handle = c_void_p()
+    notify = cast(c_void_p(_efi._c_keyboard_interrupt_callback), EFI_KEY_NOTIFY_FUNCTION)
+
+    key_data.KeyState.KeyShiftState = EFI_SHIFT_STATE_VALID | EFI_LEFT_CONTROL_PRESSED
+    check_status(stiex.RegisterKeyNotify(stiex, byref(key_data), notify, byref(handle)))
+    key_data.KeyState.KeyShiftState = EFI_SHIFT_STATE_VALID | EFI_RIGHT_CONTROL_PRESSED
+    check_status(stiex.RegisterKeyNotify(stiex, byref(key_data), notify, byref(handle)))
+
 def list_pci_devices():
     SegmentNumber = UINTN()
     BusNumber = UINTN()

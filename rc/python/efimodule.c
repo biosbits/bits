@@ -33,9 +33,22 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <grub/efi/efi.h>
 
+int py_keyboard_interrupt_callback(void *arg)
+{
+    PyErr_SetNone(PyExc_KeyboardInterrupt);
+    return -1;
+}
+
+unsigned long c_keyboard_interrupt_callback(void *KeyData)
+{
+    Py_AddPendingCall(py_keyboard_interrupt_callback, NULL);
+    return 0;
+}
+
 PyMODINIT_FUNC init_efi(void)
 {
     PyObject *m = Py_InitModule("_efi", NULL);
     PyModule_AddObject(m, "_system_table", Py_BuildValue("k", (unsigned long)grub_efi_system_table));
     PyModule_AddObject(m, "_image_handle", Py_BuildValue("k", (unsigned long)grub_efi_image_handle));
+    PyModule_AddObject(m, "_c_keyboard_interrupt_callback", PyLong_FromVoidPtr(c_keyboard_interrupt_callback));
 }

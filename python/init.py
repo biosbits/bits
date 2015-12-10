@@ -218,6 +218,7 @@ def init():
             import efi
         with init_annotation("efi"):
             efi.log_efi_info()
+            efi.register_keyboard_interrupt_handler()
 
     batch = bitsconfig.config.get("bits", "batch").strip()
     if batch:
