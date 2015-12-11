@@ -49,7 +49,10 @@ int PyOS_InterruptOccurred(void)
     return 0;
 }
 
-static int _Py_HashSecret_Initialized = 0;
+#ifndef Py_DEBUG
+static
+#endif
+int _Py_HashSecret_Initialized = 0;
 
 /* Stub out hash randomization, since we don't have a random number generator
  * to seed it from. */

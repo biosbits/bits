@@ -491,6 +491,17 @@ sighandler_t signal(int signum, sighandler_t handler)
     return SIG_ERR;
 }
 
+int snprintf(char *str, size_t size, const char *format, ...)
+{
+    int ret;
+    va_list args;
+    grub_errno = GRUB_ERR_NONE;
+    va_start(args, format);
+    ret = grub_vsnprintf(str, size, format, args);
+    va_end(args);
+    return ret;
+}
+
 int sprintf(char *str, const char *format, ...)
 {
     int ret;

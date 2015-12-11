@@ -173,6 +173,7 @@ typedef void (*sighandler_t)(int);
 #define SIG_IGN ((sighandler_t) 1)
 sighandler_t signal(int signum, sighandler_t handler);
 
+int snprintf(char *str, size_t size, const char *format, ...);
 int sprintf(char *str, const char *format, ...);
 int stat(const char *path, struct stat *buf);
 char *strdup(const char *s);
