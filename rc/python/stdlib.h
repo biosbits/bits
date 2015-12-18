@@ -3,6 +3,6 @@
 
 #include <lib/posix_wrap/stdlib.h>
 
-__attribute__((noreturn)) void abort(void);
+#define abort() grub_fatal("%s:%u: Internal error: Python called abort()\n", __FILE__, __LINE__)
 
 #endif /* STDLIB_H */

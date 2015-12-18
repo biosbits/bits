@@ -83,6 +83,7 @@ static void note_file_closure(FILE *file)
                 break;
 }
 
+#undef abort
 __attribute__((noreturn)) void abort(void)
 {
     grub_fatal("Internal error: Python called abort()\n");
