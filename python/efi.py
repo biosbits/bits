@@ -27,6 +27,7 @@
 """efi module."""
 
 from __future__ import print_function
+from cStringIO import StringIO
 from _ctypes import CFuncPtr as _CFuncPtr
 import _efi
 import binascii
@@ -1480,8 +1481,16 @@ def save_tables(decode=True):
     if decode:
         for name, table in tables.iteritems():
             fname = "{}.txt".format(name)
-            print("Saving {}...".format(fname))
-            tables_dir.create(fname).write(str(table))
+            print("Saving {}...".format(fname), end='')
+            if name == 'configurationtable':
+                out = StringIO()
+                for tbl in system_table.ConfigurationTable:
+                   print(tbl, file=out)
+                tables_dir.create(fname).write(out.getvalue())
+                out.close()
+            else:
+                tables_dir.create(fname).write(str(table))
+            print("Done")
 
 created_explore_efi_cfg = False
 
