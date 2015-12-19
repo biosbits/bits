@@ -33,6 +33,7 @@ import _efi
 import binascii
 import bits
 import bits.cdata
+from collections import OrderedDict
 from ctypes import *
 import redirect
 import os
@@ -626,7 +627,7 @@ class EFI_SYSTEM_TABLE(bits.cdata.Struct):
 
     @property
     def ConfigurationTableDict(self):
-        return dict((t.VendorGuid, t.VendorTable) for t in self.ConfigurationTable)
+        return OrderedDict((t.VendorGuid, t.VendorTable) for t in self.ConfigurationTable)
 
 system_table = EFI_SYSTEM_TABLE.from_address(_efi._system_table)
 
