@@ -39,7 +39,7 @@ int py_keyboard_interrupt_callback(void *arg)
     return -1;
 }
 
-unsigned long c_keyboard_interrupt_callback(void *KeyData)
+__attribute__((ms_abi)) unsigned long c_keyboard_interrupt_callback(void *KeyData)
 {
     Py_AddPendingCall(py_keyboard_interrupt_callback, NULL);
     return 0;
