@@ -48,7 +48,7 @@ unsigned long c_keyboard_interrupt_callback(void *KeyData)
 PyMODINIT_FUNC init_efi(void)
 {
     PyObject *m = Py_InitModule("_efi", NULL);
-    PyModule_AddObject(m, "_system_table", Py_BuildValue("k", (unsigned long)grub_efi_system_table));
-    PyModule_AddObject(m, "_image_handle", Py_BuildValue("k", (unsigned long)grub_efi_image_handle));
+    PyModule_AddObject(m, "_system_table", PyLong_FromVoidPtr(grub_efi_system_table));
+    PyModule_AddObject(m, "_image_handle", PyLong_FromVoidPtr(grub_efi_image_handle));
     PyModule_AddObject(m, "_c_keyboard_interrupt_callback", PyLong_FromVoidPtr(c_keyboard_interrupt_callback));
 }
