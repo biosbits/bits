@@ -4381,6 +4381,7 @@ def get_objpaths(objectname, depth=(2**32-1)):
 
     If depth is specified, search only that deep in the namespace."""
     l = []
+    @ACPI_WALK_CALLBACK
     def callback(handle, nesting_level, context, return_value):
         buf = ACPI_BUFFER(ACPI_ALLOCATE_BUFFER, None)
         status = AcpiGetName(handle, ACPI_FULL_PATHNAME, byref(buf))
@@ -4392,7 +4393,8 @@ def get_objpaths(objectname, depth=(2**32-1)):
         if objectname in name:
             l.append(name)
         return 0
-    check_status(AcpiWalkNamespace(ACPI_TYPE_ANY, ACPI_ROOT_OBJECT, depth, ACPI_WALK_CALLBACK(callback), ACPI_WALK_CALLBACK(0), None, None))
+    null_callback = ACPI_WALK_CALLBACK(0)
+    check_status(AcpiWalkNamespace(ACPI_TYPE_ANY, ACPI_ROOT_OBJECT, depth, callback, null_callback, None, None))
     return l
 
 def install_interface(name):
