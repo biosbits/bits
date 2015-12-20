@@ -35,9 +35,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <grub/memory.h>
 #include <grub/mm.h>
 
-GRUB_MOD_LICENSE("GPLv3+");
-GRUB_MOD_DUAL_LICENSE("3-clause BSD");
-
 static void *global_working_memory = NULL;
 static void *global_page_below_1M = NULL;
 static void *global_reserved_mwait_memory = NULL;
@@ -110,12 +107,4 @@ U32 smp_function(U32 apicid, CALLBACK function, void *param)
 void smp_sleep(U32 microseconds)
 {
     smp_sleep_with_memory(global_working_memory, microseconds);
-}
-
-GRUB_MOD_INIT(smp)
-{
-}
-
-GRUB_MOD_FINI(smp)
-{
 }

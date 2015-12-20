@@ -32,9 +32,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <grub/mm.h>
 #include "bitsutil.h"
 
-GRUB_MOD_LICENSE("GPLv3+");
-GRUB_MOD_DUAL_LICENSE("3-clause BSD");
-
 void dprintf(const char *debug_context, const char *fmt, ...)
 {
     va_list args;
