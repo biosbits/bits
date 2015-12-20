@@ -92,7 +92,7 @@ def _execute_action(entry, value=None):
         return acpi.error_type_flags.from_address(entry.register_region.address)
     elif entry.injection_action == SET_ERROR_TYPE_WITH_ADDRESS:
         if value is None:
-            raise ValueError("action SET_ERROR_TYPE_WITH_ADDRESS but no input paramters provided")
+            raise ValueError("action SET_ERROR_TYPE_WITH_ADDRESS but no input parameters provided")
         error_type = value[0]
         if error_type.processor_correctable or error_type.processor_uncorrectable_non_fatal or error_type.processor_uncorrectable_fatal:
             error_type, flags, apicid = value
@@ -248,7 +248,7 @@ def _set_error_type_with_addr_op_cpu(error_type, flags, apicid=None):
 
 # This routine is specific to setting a PCIE error
 def _set_error_type_with_addr_op_pcie(error_type, flags, segment=None, bus=None, device=None, function=None):
-    return get_and_execute_op(SET_ERROR_TYPE_WITH_ADDRESS, (error_type, flags, (segment, bus, device, function)))
+    return get_and_execute_op(SET_ERROR_TYPE_WITH_ADDRESS, (error_type, flags, segment, bus, device, function))
 
 def einj_cpu_init():
     """Return the error injection cpu init method.
@@ -417,8 +417,8 @@ def inject_pcie_correctable_err(segment=None, bus=None, device=None, function=No
         print('PCI Express Correctable error injection is not supported')
         return
     with _error_injection_op():
-        with _inject_pcie_error(segment=None, bus=None, device=None, function=None) as error_type:
-            error_type.pcie_express_correctable = 1
+        with _inject_pcie_error(segment, bus, device, function) as error_type:
+            error_type.pci_express_correctable = 1
 
 def inject_pcie_unc_nonfatal_err(segment=None, bus=None, device=None, function=None):
     """Inject PCIE uncorrectable non-fatal error.
@@ -427,13 +427,13 @@ def inject_pcie_unc_nonfatal_err(segment=None, bus=None, device=None, function=N
     SET_ERROR_TYPE_WITH_ADDRESS Error Injection Action is used.
     Otherwise, SET_ERROR_TYPE is used."""
 
-    if get_error_type_op().processor_uncorrectable_non_fatal == 0:
+    if get_error_type_op().pci_express_uncorrectable_non_fatal == 0:
         print('PCI Express Uncorrectable non-Fatal error injection is not supported')
         return
 
     with _error_injection_op():
-        with _inject_pcie_error(segment=None, bus=None, device=None, function=None) as error_type:
-            error_type.pci_expresss_uncorrectable_non_fatal = 1
+        with _inject_pcie_error(segment, bus, device, function) as error_type:
+            error_type.pci_express_uncorrectable_non_fatal = 1
 
 def inject_pcie_unc_fatal_err(segment=None, bus=None, device=None, function=None):
     """Inject PCIE uncorrectable fatal error.
@@ -446,8 +446,8 @@ def inject_pcie_unc_fatal_err(segment=None, bus=None, device=None, function=None
         print('PCIE Uncorrectable Fatal error injection is not supported')
         return
     with _error_injection_op():
-        with _inject_pcie_error(segment=None, bus=None, device=None, function=None) as error_type:
-            error_type.processor_uncorrectable_fatal = 1
+        with _inject_pcie_error(segment, bus, device, function) as error_type:
+            error_type.pci_express_uncorrectable_fatal = 1
 
 def _inject_platform_error():
     # Constructor creates a structure with all zero init
