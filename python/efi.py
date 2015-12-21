@@ -38,7 +38,7 @@ from collections import OrderedDict
 from ctypes import *
 import redirect
 import os
-import sys
+import sys as _sys
 import ttypager
 import uuid
 
@@ -1849,6 +1849,6 @@ def list_pci_devices():
         print("{}:{}:{}:{}".format(SegmentNumber.value, BusNumber.value, DeviceNumber.value, FunctionNumber.value))
 
 def exit(status=0):
-    if hasattr(sys, "exitfunc"):
-        sys.exitfunc()
+    if hasattr(_sys, "exitfunc"):
+        _sys.exitfunc()
     system_table.BootServices.contents.Exit(_efi._image_handle, status, 0, None)
