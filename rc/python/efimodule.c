@@ -121,13 +121,41 @@ static int call_key_callback(void *key_data)
     return call_callback(key_callback, key_data);
 }
 
-static __attribute__((ms_abi)) unsigned long c_key_callback(void *key_data)
+struct EFI_KEY_DATA {
+    U16 ScanCode;
+    U16 UnicodeChar;
+    U32 KeyShiftState;
+    U8 KeyToggleState;
+};
+
+#define EFI_SHIFT_STATE_VALID  0x80000000
+#define EFI_SHIFT_STATE_MASK   0x000003ff
+#define EFI_TOGGLE_STATE_VALID 0x80
+#define EFI_SCROLL_LOCK_ACTIVE 0x01
+#define EFI_NUM_LOCK_ACTIVE    0x02
+#define EFI_CAPS_LOCK_ACTIVE   0x04
+#define EFI_KEY_STATE_EXPOSED  0x40
+
+static __attribute__((ms_abi)) unsigned long c_key_callback(struct EFI_KEY_DATA *key_data)
 {
-    void *key_data_copy = PyObject_Malloc(sizeof_EFI_KEY_DATA);
-    if (!key_data_copy)
-        return GRUB_EFI_OUT_OF_RESOURCES;
-    memcpy(key_data_copy, key_data, sizeof_EFI_KEY_DATA);
-    Py_AddPendingCall(call_key_callback, key_data_copy);
+    unsigned long data;
+    if (key_data->UnicodeChar)
+        data = key_data->UnicodeChar;
+    else
+        data = (1UL << 16) | (unsigned long)key_data->ScanCode;
+    if (key_data->KeyShiftState & EFI_SHIFT_STATE_VALID)
+        data |= (key_data->KeyShiftState & EFI_SHIFT_STATE_MASK) << 17;
+    if (key_data->KeyToggleState & EFI_TOGGLE_STATE_VALID) {
+        if (key_data->KeyToggleState & EFI_SCROLL_LOCK_ACTIVE)
+            data |= 1 << 28;
+        if (key_data->KeyToggleState & EFI_NUM_LOCK_ACTIVE)
+            data |= 1 << 29;
+        if (key_data->KeyToggleState & EFI_CAPS_LOCK_ACTIVE)
+            data |= 1 << 30;
+        if (key_data->KeyToggleState & EFI_KEY_STATE_EXPOSED)
+            data |= 1 << 31;
+    }
+    Py_AddPendingCall(call_key_callback, (void *)data);
     return 0;
 }
 

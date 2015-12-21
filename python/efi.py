@@ -1786,9 +1786,29 @@ def close_all_events():
 
 _key_handlers = {}
 
-def _key_callback(key_data_ptr):
+# The C code packs the important bits of EFI_KEY_DATA into one pointer-sized
+# value to avoid memory allocation.
+def _unpack_key_data(d):
+    key_data = EFI_KEY_DATA()
+    if d & (1 << 16):
+        key_data.Key.ScanCode = d & 0xffff
+    else:
+        key_data.Key.UnicodeChar = chr(d & 0xffff)
+    key_data.KeyState.KeyShiftState = EFI_SHIFT_STATE_VALID | ((d >> 17) & 0x3ff)
+    if d & (1 << 28):
+        key_data.KeyState.KeyToggleState |= EFI_SCROLL_LOCK_ACTIVE
+    if d & (1 << 29):
+        key_data.KeyState.KeyToggleState |= EFI_NUM_LOCK_ACTIVE
+    if d & (1 << 30):
+        key_data.KeyState.KeyToggleState |= EFI_CAPS_LOCK_ACTIVE
+    if d & (1 << 31):
+        key_data.KeyState.KeyToggleState |= EFI_KEY_STATE_EXPOSED
+    key_data.KeyState.KeyToggleState |= EFI_TOGGLE_STATE_VALID
+    return key_data
+
+def _key_callback(key_data_packed):
     global _key_handlers
-    key_data = EFI_KEY_DATA.from_address(key_data_ptr)
+    key_data = _unpack_key_data(key_data_packed)
     shift = 0
     if key_data.KeyState.KeyShiftState & EFI_SHIFT_STATE_VALID:
         shift = key_data.KeyState.KeyShiftState & ~EFI_SHIFT_STATE_VALID
