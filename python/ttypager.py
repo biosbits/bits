@@ -2,12 +2,12 @@
 # license, with various improvements.
 
 import bits
+import bits.input
 import contextlib
 import itertools
 import os
 import os.path
 import pager
-import readline
 import redirect
 import string
 import sys
@@ -26,6 +26,7 @@ def ttypager(text):
     """Page through text on a text terminal."""
     try:
         import efi
+        import readline
         efi_options = ["f to write file"]
     except ImportError as e:
         efi_options = []
@@ -53,13 +54,14 @@ def ttypager(text):
                 prompt = '-- {} --'.format(options)
                 prompt_len = len(prompt)
                 sys.stdout.write(prompt)
-                c = bits.get_key()
+                c = bits.input.get_key()
+                key = bits.input.key
                 # Write the spaces one at a time to defeat word-wrap
                 sys.stdout.write('\r')
                 for i in range(prompt_len):
                     sys.stdout.write(' ')
                 sys.stdout.write('\r')
-                if efi_options and c in (ord('f'), ord('F')):
+                if efi_options and c in (key('f'), key('F')):
                     ttydir = efi.get_boot_fs()
                     filepath = os.path.normpath(str.strip(readline._readline("filename: "), "\n"))
                     basepath, fname = os.path.split(filepath)
@@ -70,28 +72,28 @@ def ttypager(text):
                     ttydir.create(fname).write(string.join(lines, '\n') + '\n')
                     print "Done"
                     print "Hit any key to continue..."
-                    c = bits.get_key()
-                if c in (ord('q'), ord('Q')):
+                    c = bits.input.get_key()
+                if c in (key('q'), key('Q')):
                     break
-                elif c in (ord('\r'), ord('\n'), bits.KEY_DOWN, bits.MOD_CTRL | ord('n')):
+                elif c in (key('\r'), key('\n'), key(bits.input.KEY_DOWN), key('n', ctrl=True)):
                     if lines[r:]:
                         sys.stdout.write(lines[r] + '\n')
                         r = r + 1
                     continue
-                if c == bits.KEY_HOME:
+                if c == key(bits.input.KEY_HOME):
                     bits.clear_screen()
                     r = 0
-                if c == bits.KEY_END:
+                if c == key(bits.input.KEY_END):
                     bits.clear_screen()
                     r = len(lines) - inc
                     if r < 0:
                         r = 0
-                if c in (bits.KEY_UP, bits.MOD_CTRL | ord('p')):
+                if c in (key(bits.input.KEY_UP), key('p', ctrl=True)):
                     bits.clear_screen()
                     r = r - 1 - inc
                     if r < 0:
                         r = 0
-                if c in (bits.KEY_PAGE_UP, ord('b'), ord('B')):
+                if c in (key(bits.input.KEY_PAGE_UP), key('b'), key('B')):
                     bits.clear_screen()
                     r = r - inc - inc
                     if r < 0:

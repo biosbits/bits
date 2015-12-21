@@ -551,7 +551,7 @@ static PyMethodDef bitsMethods[] = {
     {"file_data_and_disk_blocks", (PyCFunction)bits_file_data_and_disk_blocks, METH_VARARGS, "file_data_and_disk_blocks(file) -> (data, [(sector, offset, length), ...])"},
     {"_getenv",  bits__getenv, METH_VARARGS, "_getenv(key, default=None) -> value of environment variable \"key\", or default if it doesn't exist"},
     {"_getenvdict",  bits__getenvdict, METH_NOARGS, "_getenvdict() -> environment dictionary"},
-    {"get_key", bits_get_key, METH_NOARGS, "get_key() -> keycode"},
+    {"_get_key", bits_get_key, METH_NOARGS, "_get_key() -> keycode"},
     {"get_term_count", bits_get_term_count, METH_NOARGS, "get_term_count() -> number of terminals"},
     {"get_width_height", (PyCFunction)bits_get_width_height, METH_KEYWORDS, "get_width_height(term) -> (width, height)" },
     {"get_xy", (PyCFunction)bits_get_xy, METH_KEYWORDS, "get_xy(term) -> (cursor_x, cursor_y)"},

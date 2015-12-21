@@ -27,6 +27,7 @@
 """USB module."""
 
 import bits
+import bits.input
 import os
 import pci
 import sys
@@ -98,8 +99,8 @@ after this test completes.
 You can view the results, and then reboot.
 
 Press escape to quit, or any other key to continue."""
-    c = bits.get_key()
-    if c == bits.KEY_ESC:
+    k = bits.input.get_key()
+    if k.key == bits.input.KEY_ESC:
         print 'Test aborted!'
         return False
 

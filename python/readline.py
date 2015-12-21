@@ -27,6 +27,7 @@
 """readline module."""
 
 import bits
+import bits.input
 import pager
 import redirect
 import string
@@ -126,7 +127,7 @@ def parse_and_bind(s):
     return None
 
 key_hooks = {}
-function_keys = set(getattr(bits, "KEY_F{}".format(n)) for n in range(1, 12+1))
+function_keys = set(getattr(bits.input, "KEY_F{}".format(n)) for n in range(1, 12+1))
 
 def add_key_hook(key, func):
     global key_hooks
@@ -187,12 +188,13 @@ def _readline(prompt=""):
                         # move the cursor to location of pos within the line buffer
                         PositionCursor(pos, line_x[term], line_y[term], term)
 
-                    c = bits.get_key()
+                    c = bits.input.get_key()
 
+                    key = bits.input.key
                     def ctrl(k):
-                        return bits.MOD_CTRL | ord(k)
+                        return key(k, ctrl=True)
 
-                    if c == ord('\r') or c == ord('\n') or c == ctrl('o'):
+                    if c == key('\r') or c == key('\n') or c == ctrl('o'):
                         if line_buffer or (history and history[-1]):
                             history.append(line_buffer)
                         if c == ctrl('o'): # Ctrl-O
@@ -200,14 +202,14 @@ def _readline(prompt=""):
                         sys.stdout.write('\n')
                         return line_buffer + '\n'
 
-                    if not (c == ord('\t') or c == ctrl('i')):
+                    if not (c == key('\t') or c == ctrl('i')):
                         # reset completer state to force restart of the completer
                         completer_state = 0
 
-                    if c == bits.KEY_HOME or c == ctrl('a'):
+                    if c == key(bits.input.KEY_HOME) or c == ctrl('a'):
                         # start of line
                         pos = 0
-                    elif c == bits.KEY_LEFT or c == ctrl('b'):
+                    elif c == key(bits.input.KEY_LEFT) or c == ctrl('b'):
                         # left
                         if pos != 0:
                             pos -= 1
@@ -217,20 +219,20 @@ def _readline(prompt=""):
                             return ""
                         if pos < len(line_buffer):
                             line_buffer, pos = delete_char(line_buffer, pos)
-                    elif c == bits.KEY_DELETE:
+                    elif c == key(bits.input.KEY_DELETE):
                         if pos < len(line_buffer):
                             line_buffer, pos = delete_char(line_buffer, pos)
-                    elif c == bits.KEY_END or c == ctrl('e'):
+                    elif c == key(bits.input.KEY_END) or c == ctrl('e'):
                         # end of line
                         pos = len(line_buffer)
-                    elif c == bits.KEY_RIGHT or c == ctrl('f'):
+                    elif c == key(bits.input.KEY_RIGHT) or c == ctrl('f'):
                         # right
                         if pos != len(line_buffer):
                             pos += 1
-                    elif c == ord('\b') or c == ctrl('h'):
+                    elif c == key('\b') or c == ctrl('h'):
                         # backspace
                         line_buffer, pos = delete_char_left(line_buffer, pos)
-                    elif c == ord('\t') or c == ctrl('i'):
+                    elif c == key('\t') or c == ctrl('i'):
                         # tab completion
                         if completer is not None:
                             if completer_state != 0:
@@ -260,7 +262,7 @@ def _readline(prompt=""):
                         sys.stdout.write(prompt)
                         for term in range(term_count):
                             line_x[term], line_y[term] = bits.get_xy(term);
-                    elif c == bits.KEY_DOWN or c == ctrl('n'):
+                    elif c == key(bits.input.KEY_DOWN) or c == ctrl('n'):
                         # Next line in history
                         if history_index < len(history):
                             history_index += 1
@@ -268,7 +270,7 @@ def _readline(prompt=""):
                                 line_buffer, pos = history_state.get(history_index)
                             else:
                                 line_buffer, pos = history_state.get(history_index, (history[history_index], len(history[history_index])))
-                    elif c == bits.KEY_UP or c == ctrl('p'):
+                    elif c == key(bits.input.KEY_UP) or c == ctrl('p'):
                         # Previous line in history
                         if history_index > 0:
                             history_index -= 1
@@ -285,14 +287,17 @@ def _readline(prompt=""):
                         while pos != 0 and line_buffer[pos-1] != ' ':
                             pos -= 1
                         line_buffer = line_buffer[:pos] + line_buffer[cur:]
-                    elif c == ctrl('z') or c == bits.KEY_ESC:
+                    elif c == ctrl('z') or c == key(bits.input.KEY_ESC):
                         if len(line_buffer) == 0:
                             return ""
-                    elif c in key_hooks:
-                        key_hooks[c]()
-                    elif c < 256 and chr(c) in string.printable:
+                    elif c.key in key_hooks:
+                        key_hooks[c.key]()
+                    elif not(c.ctrl) and not(c.alt) and isinstance(c.key, basestring) and c.key in string.printable:
                         # printable
-                        line_buffer, pos = insert_char(line_buffer, chr(c), pos)
+                        try:
+                            line_buffer, pos = insert_char(line_buffer, c.key.encode('ascii'), pos)
+                        except UnicodeError:
+                            pass
                     else:
                         pass
 

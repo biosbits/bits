@@ -28,6 +28,7 @@
 
 from __future__ import print_function
 import bits
+import bits.input
 from ctypes import *
 from efi import *
 import itertools
@@ -128,15 +129,15 @@ def resume():
             break
         slide_p = cast(slides[current_slide], POINTER(EFI_GRAPHICS_OUTPUT_BLT_PIXEL))
         gop.Blt(byref(gop), slide_p, EfiBltBufferToVideo, 0, 0, 0, 0, info.HorizontalResolution, info.VerticalResolution, 0)
-        k = bits.get_key()
-        if k == bits.KEY_ESC:
+        k = bits.input.get_key()
+        if k.key == bits.input.KEY_ESC:
             break
-        elif k in (bits.KEY_LEFT, bits.KEY_UP, bits.KEY_PAGE_UP):
+        elif k.key in (bits.input.KEY_LEFT, bits.input.KEY_UP, bits.input.KEY_PAGE_UP):
             if current_slide > 0:
                 current_slide -= 1
-        elif k in (bits.KEY_RIGHT, bits.KEY_DOWN, bits.KEY_PAGE_DOWN, ord(' ')):
+        elif k.key in (bits.input.KEY_RIGHT, bits.input.KEY_DOWN, bits.input.KEY_PAGE_DOWN, ' '):
             if current_slide < max_slide:
                 current_slide += 1
-        elif k == bits.KEY_HOME:
+        elif k.key == bits.input.KEY_HOME:
             current_slide = 0
     gop.Blt(byref(gop), saved_screen, EfiBltBufferToVideo, 0, 0, 0, 0, info.HorizontalResolution, info.VerticalResolution, 0)
