@@ -69,7 +69,7 @@ static PyMethodDef efiMethods[] = {
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
-int call_key_callback(void *key_data)
+static int call_key_callback(void *key_data)
 {
     PyObject *ret;
     ret = PyObject_CallFunction(key_callback, "O&", PyLong_FromVoidPtr, key_data);
@@ -79,7 +79,7 @@ int call_key_callback(void *key_data)
     return 0;
 }
 
-__attribute__((ms_abi)) unsigned long c_key_callback(void *key_data)
+static __attribute__((ms_abi)) unsigned long c_key_callback(void *key_data)
 {
     void *key_data_copy = PyObject_Malloc(sizeof_EFI_KEY_DATA);
     if (!key_data_copy)
