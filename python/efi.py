@@ -1741,6 +1741,49 @@ EFI_PCI_IO_PROTOCOL._fields_ = [
     ('RomImage', c_void_p),
 ]
 
+_event_handlers = {}
+
+def _event_callback(event_value):
+    global _event_handlers
+    _event_handlers[event_value]()
+
+_efi._set_event_callback(_event_callback)
+
+def create_event(handler, timer=False, tpl=TPL_CALLBACK):
+    """Create an EFI_EVENT with the specified Python handler
+
+    The event always has type EVT_NOTIFY_SIGNAL. Pass timer=True to
+    additionally use EVT_TIMER.
+
+    tpl specifies the TPL for the callback: either TPL_CALLBACK (default) or
+    TPL_NOTIFY.
+
+    Returns the EFI_EVENT.  Do not close directly; always call
+    efi.close_event."""
+    global _event_handlers
+    type = EVT_NOTIFY_SIGNAL
+    if timer:
+        type |= EVT_TIMER
+    event = EFI_EVENT()
+    notify = cast(c_void_p(_efi._c_event_callback), EFI_EVENT_NOTIFY)
+    # Safe to create before adding to handlers; nothing can signal it yet
+    check_status(system_table.BootServices.contents.CreateEvent(type, tpl, notify, None, byref(event)))
+    _event_handlers[event.value] = handler
+    return event
+
+def close_event(event):
+    """Close an EFI_EVENT created by efi.create_event"""
+    global _event_handlers
+    _event_handlers[event.value] # raise KeyError if not found
+    check_status(system_table.BootServices.contents.CloseEvent(event))
+    del _event_handlers[event.value]
+
+@atexit.register
+def close_all_events():
+    global _event_handlers
+    for event_value in _event_handlers.keys():
+        close_event(EFI_EVENT(event_value))
+
 _key_handlers = {}
 
 def _key_callback(key_data_ptr):

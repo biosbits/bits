@@ -34,22 +34,48 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <grub/efi/efi.h>
 
+static PyObject *set_callback(PyObject **global, PyObject *temp)
+{
+    if (!PyCallable_Check(temp))
+        return PyErr_Format(PyExc_TypeError, "expected a callable");
+
+    Py_XDECREF(*global);
+    Py_XINCREF(temp);
+    *global = temp;
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *event_callback;
+
+static PyObject *set_event_callback(PyObject *self, PyObject *args)
+{
+    PyObject *temp;
+    if (!PyArg_ParseTuple(args, "O:_set_event_callback", &temp))
+        return NULL;
+    return set_callback(&event_callback, temp);
+}
+
+PyDoc_STRVAR(set_event_callback_doc,
+"_set_event_callback(event_callback)\n"
+"\n"
+"Set the callback for an event, which must be a callable with the following\n"
+"signature:\n"
+"\n"
+"event_callback(event):\n"
+"    event is an EFI_EVENT.  No return value.  If this function raises an\n"
+"    exception, that exception will propagate to the main thread.\n"
+);
+
 static PyObject *key_callback;
 static unsigned long sizeof_EFI_KEY_DATA;
 
 static PyObject *set_key_callback(PyObject *self, PyObject *args)
 {
-    PyObject *key_callback_temp;
-    if (!PyArg_ParseTuple(args, "Ok:_set_key_callback", &key_callback_temp, &sizeof_EFI_KEY_DATA))
+    PyObject *temp;
+    if (!PyArg_ParseTuple(args, "Ok:_set_key_callback", &temp, &sizeof_EFI_KEY_DATA))
         return NULL;
-    if (!PyCallable_Check(key_callback_temp))
-        return PyErr_Format(PyExc_TypeError, "expected a callable");
-
-    Py_XDECREF(key_callback);
-    Py_XINCREF(key_callback_temp);
-    key_callback = key_callback_temp;
-
-    Py_RETURN_NONE;
+    return set_callback(&key_callback, temp);
 }
 
 PyDoc_STRVAR(set_key_callback_doc,
@@ -65,18 +91,34 @@ PyDoc_STRVAR(set_key_callback_doc,
 );
 
 static PyMethodDef efiMethods[] = {
+    {"_set_event_callback", set_event_callback, METH_VARARGS, set_event_callback_doc},
     {"_set_key_callback", set_key_callback, METH_VARARGS, set_key_callback_doc},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
-static int call_key_callback(void *key_data)
+static int call_callback(PyObject *callback, void *arg)
 {
     PyObject *ret;
-    ret = PyObject_CallFunction(key_callback, "O&", PyLong_FromVoidPtr, key_data);
+    ret = PyObject_CallFunction(callback, "O&", PyLong_FromVoidPtr, arg);
     Py_XDECREF(ret);
     if (PyErr_Occurred())
         return -1;
     return 0;
+}
+
+static int call_event_callback(void *event)
+{
+    return call_callback(event_callback, event);
+}
+
+static __attribute__((ms_abi)) void c_event_callback(void *event, void *context)
+{
+    Py_AddPendingCall(call_event_callback, event);
+}
+
+static int call_key_callback(void *key_data)
+{
+    return call_callback(key_callback, key_data);
 }
 
 static __attribute__((ms_abi)) unsigned long c_key_callback(void *key_data)
@@ -94,5 +136,6 @@ PyMODINIT_FUNC init_efi(void)
     PyObject *m = Py_InitModule("_efi", efiMethods);
     PyModule_AddObject(m, "_system_table", PyLong_FromVoidPtr(grub_efi_system_table));
     PyModule_AddObject(m, "_image_handle", PyLong_FromVoidPtr(grub_efi_image_handle));
+    PyModule_AddObject(m, "_c_event_callback", PyLong_FromVoidPtr(c_event_callback));
     PyModule_AddObject(m, "_c_key_callback", PyLong_FromVoidPtr(c_key_callback));
 }
