@@ -30,25 +30,69 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "pyunconfig.h"
 
 #include "efimodule.h"
+#include "portable.h"
 
 #include <grub/efi/efi.h>
 
-int py_keyboard_interrupt_callback(void *arg)
+static PyObject *key_callback;
+static unsigned long sizeof_EFI_KEY_DATA;
+
+static PyObject *set_key_callback(PyObject *self, PyObject *args)
 {
-    PyErr_SetNone(PyExc_KeyboardInterrupt);
-    return -1;
+    PyObject *key_callback_temp;
+    if (!PyArg_ParseTuple(args, "Ok:_set_key_callback", &key_callback_temp, &sizeof_EFI_KEY_DATA))
+        return NULL;
+    if (!PyCallable_Check(key_callback_temp))
+        return PyErr_Format(PyExc_TypeError, "expected a callable");
+
+    Py_XDECREF(key_callback);
+    Py_XINCREF(key_callback_temp);
+    key_callback = key_callback_temp;
+
+    Py_RETURN_NONE;
 }
 
-__attribute__((ms_abi)) unsigned long c_keyboard_interrupt_callback(void *KeyData)
+PyDoc_STRVAR(set_key_callback_doc,
+"_set_key_callback(key_callback, sizeof_EFI_KEY_DATA)\n"
+"\n"
+"Set the callback for a keyboard key, which must be a callable with the\n"
+"following signature:\n"
+"\n"
+"key_callback(keydata):\n"
+"    keydata is a temporary pointer to EFI_KEY_DATA, freed after key_callback\n"
+"    returns.  No return value.  If this function raises an exception, that\n"
+"    exception will propagate to the main thread.\n"
+);
+
+static PyMethodDef efiMethods[] = {
+    {"_set_key_callback", set_key_callback, METH_VARARGS, set_key_callback_doc},
+    {NULL, NULL, 0, NULL}        /* Sentinel */
+};
+
+int call_key_callback(void *key_data)
 {
-    Py_AddPendingCall(py_keyboard_interrupt_callback, NULL);
+    PyObject *ret;
+    ret = PyObject_CallFunction(key_callback, "O&", PyLong_FromVoidPtr, key_data);
+    Py_XDECREF(ret);
+    if (PyErr_Occurred())
+        return -1;
+    return 0;
+}
+
+__attribute__((ms_abi)) unsigned long c_key_callback(void *key_data)
+{
+    void *key_data_copy = PyObject_Malloc(sizeof_EFI_KEY_DATA);
+    if (!key_data_copy)
+        return GRUB_EFI_OUT_OF_RESOURCES;
+    memcpy(key_data_copy, key_data, sizeof_EFI_KEY_DATA);
+    Py_AddPendingCall(call_key_callback, key_data_copy);
     return 0;
 }
 
 PyMODINIT_FUNC init_efi(void)
 {
-    PyObject *m = Py_InitModule("_efi", NULL);
+    PyObject *m = Py_InitModule("_efi", efiMethods);
     PyModule_AddObject(m, "_system_table", PyLong_FromVoidPtr(grub_efi_system_table));
     PyModule_AddObject(m, "_image_handle", PyLong_FromVoidPtr(grub_efi_image_handle));
-    PyModule_AddObject(m, "_c_keyboard_interrupt_callback", PyLong_FromVoidPtr(c_keyboard_interrupt_callback));
+    PyModule_AddObject(m, "_c_key_callback", PyLong_FromVoidPtr(c_key_callback));
 }

@@ -30,6 +30,7 @@ from __future__ import print_function
 from cStringIO import StringIO
 from _ctypes import CFuncPtr as _CFuncPtr
 import _efi
+import atexit
 import binascii
 import bits
 import bits.cdata
@@ -1740,17 +1741,58 @@ EFI_PCI_IO_PROTOCOL._fields_ = [
     ('RomImage', c_void_p),
 ]
 
-def register_keyboard_interrupt_handler():
-    stiex = EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL.from_handle(system_table.ConsoleInHandle)
-    key_data = EFI_KEY_DATA()
-    key_data.Key.UnicodeChar = c_wchar('c')
-    handle = c_void_p()
-    notify = cast(c_void_p(_efi._c_keyboard_interrupt_callback), EFI_KEY_NOTIFY_FUNCTION)
+_key_handlers = {}
 
-    key_data.KeyState.KeyShiftState = EFI_SHIFT_STATE_VALID | EFI_LEFT_CONTROL_PRESSED
+def _key_callback(key_data_ptr):
+    global _key_handlers
+    key_data = EFI_KEY_DATA.from_address(key_data_ptr)
+    shift = 0
+    if key_data.KeyState.KeyShiftState & EFI_SHIFT_STATE_VALID:
+        shift = key_data.KeyState.KeyShiftState & ~EFI_SHIFT_STATE_VALID
+    _key_handlers[key_data.Key.ScanCode, key_data.Key.UnicodeChar, shift][1]()
+
+_efi._set_key_callback(_key_callback, sizeof(EFI_KEY_DATA))
+
+def register_key_handler(handler, code=0, char='\0', shift=0):
+    global _key_handlers
+    if (code == 0 and char == '\0') or (code != 0 and char != '\0'):
+        raise ValueError("Must provide exactly one of code and char")
+    shift &= ~EFI_SHIFT_STATE_VALID
+    dict_key = code, char, shift
+    if dict_key in _key_handlers:
+        raise RuntimeError("Duplicate key handler for key", dict_key)
+    stiex = EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL.from_handle(system_table.ConsoleInHandle)
+    handle = c_void_p()
+    notify = cast(c_void_p(_efi._c_key_callback), EFI_KEY_NOTIFY_FUNCTION)
+    key_data = EFI_KEY_DATA()
+    key_data.Key.ScanCode = code
+    key_data.Key.UnicodeChar = char
+    if shift:
+        key_data.KeyState.KeyShiftState = EFI_SHIFT_STATE_VALID | shift
     check_status(stiex.RegisterKeyNotify(stiex, byref(key_data), notify, byref(handle)))
-    key_data.KeyState.KeyShiftState = EFI_SHIFT_STATE_VALID | EFI_RIGHT_CONTROL_PRESSED
-    check_status(stiex.RegisterKeyNotify(stiex, byref(key_data), notify, byref(handle)))
+    _key_handlers[dict_key] = (handle, handler)
+
+def unregister_key_handler(code=0, char='\0', shift=0):
+    global _key_handlers
+    shift &= ~EFI_SHIFT_STATE_VALID
+    handle, handler = _key_handlers[(code, char, shift)]
+    stiex = EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL.from_handle(system_table.ConsoleInHandle)
+    check_status(stiex.UnregisterKeyNotify(stiex, handle))
+    del _key_handlers[(code, char, shift)]
+
+@atexit.register
+def unregister_all_key_handlers():
+    global _key_handlers
+    for k in _key_handlers.keys():
+        unregister_key_handler(*k)
+
+def raise_KeyboardInterrupt():
+    raise KeyboardInterrupt()
+
+def register_keyboard_interrupt_handler():
+    for char in ('c', '\x03'):
+        for shift in (EFI_LEFT_CONTROL_PRESSED, EFI_RIGHT_CONTROL_PRESSED):
+            register_key_handler(raise_KeyboardInterrupt, char=char, shift=shift)
 
 def list_pci_devices():
     SegmentNumber = UINTN()
