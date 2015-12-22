@@ -68,8 +68,10 @@ def localtime(seconds = None):
 
     return loctime._replace(tm_yday = ordinaldate)
 
+def sleep(seconds):
+    _bits._sleep_ms(max(int(seconds * 1000), 0))
+
 #mktime
-#sleep
 #strftime
 #strptime
 #struct_time

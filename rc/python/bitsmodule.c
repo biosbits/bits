@@ -276,6 +276,15 @@ static PyObject *bits__putenv(PyObject *self, PyObject *args)
     return Py_BuildValue("");
 }
 
+static PyObject *bits__sleep_ms(PyObject *self, PyObject *args)
+{
+    uint32_t ms;
+    if (!PyArg_ParseTuple(args, "I", &ms))
+        return NULL;
+    grub_millisleep(ms);
+    return Py_BuildValue("");
+}
+
 static PyObject *bits__stat(PyObject *self, PyObject *args)
 {
     const char *path;
@@ -567,6 +576,7 @@ static PyMethodDef bitsMethods[] = {
     {"_set_readline_callback", bits_set_readline_callback, METH_VARARGS, "_set_readline_callback(callable)"},
     {"_stat", bits__stat, METH_VARARGS, "_stat(path) -> tuple (internal implementation details of stat)"},
     {"_time", bits__time, METH_NOARGS, "_time() -> time in seconds (accurate for relative use only)"},
+    {"_sleep_ms", bits__sleep_ms, METH_VARARGS, "_sleep_ms(ms) -> time to sleep in milliseconds"},
     {"_unsetenv",  bits__unsetenv, METH_VARARGS, "_unsetenv(key): Unset an environment variable"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
