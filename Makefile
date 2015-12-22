@@ -219,6 +219,7 @@ pylibs:=\
 	linecache.py \
 	logging/__init__.py \
 	mimetools.py \
+	mimetypes.py \
 	opcode.py \
 	optparse.py \
 	pdb.py \
