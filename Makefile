@@ -181,6 +181,7 @@ pylibtmp:=$(workdir)/python-lib
 pylibs:=\
 	__future__.py \
 	_abcoll.py \
+	_threading_local.py \
 	_weakrefset.py \
 	abc.py \
 	argparse.py \
@@ -202,6 +203,7 @@ pylibs:=\
 	difflib.py \
 	dis.py \
 	dummy_thread.py \
+	dummy_threading.py \
 	encodings \
 	fnmatch.py \
 	formatter.py \
@@ -246,6 +248,7 @@ pylibs:=\
 	StringIO.py \
 	struct.py \
 	textwrap.py \
+	threading.py \
 	timeit.py \
 	token.py \
 	tokenize.py \
