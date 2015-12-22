@@ -236,6 +236,7 @@ pylibs:=\
 	rfc822.py \
 	rlcompleter.py \
 	shlex.py \
+	shutil.py \
 	socket.py \
 	sre_compile.py \
 	sre_constants.py \
