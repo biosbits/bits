@@ -188,6 +188,7 @@ pylibs:=\
 	base64.py \
 	bdb.py \
 	bisect.py \
+	cgi.py \
 	cmd.py \
 	codecs.py \
 	collections.py \
