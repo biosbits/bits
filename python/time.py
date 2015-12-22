@@ -69,7 +69,18 @@ def localtime(seconds = None):
     return loctime._replace(tm_yday = ordinaldate)
 
 #mktime
-#sleep
+
+def sleep(seconds):
+    """sleep(seconds)
+
+    Delay execution for a given number of seconds.  The argument may be
+    a floating point number for subsecond precision."""
+    if seconds < 0:
+        raise ValueError("seconds must not be negative")
+    start = time()
+    while time() - start < seconds:
+        pass
+
 #strftime
 #strptime
 #struct_time
