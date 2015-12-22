@@ -660,11 +660,6 @@ EVT_RUNTIME = 0x40000000
 EVT_NOTIFY_WAIT = 0x100
 EVT_NOTIFY_SIGNAL = 0x200
 
-def _event_callback_set_bool(event, context):
-    cast(context, POINTER(c_bool)).contents.value = True
-
-event_callback_set_bool = EFI_EVENT_NOTIFY(_event_callback_set_bool)
-
 class event_signal(object):
     """A wrapper around an EFI_EVENT of type EVT_NOTIFY_SIGNAL
 
@@ -673,12 +668,14 @@ class event_signal(object):
     The caller must ensure that the event does not get signaled after the
     event_signal gets destroyed."""
     def __init__(self):
-        self.event = EFI_EVENT()
-        self.status = c_bool(False)
-        check_status(system_table.BootServices.contents.CreateEvent(EVT_NOTIFY_SIGNAL, TPL_CALLBACK, event_callback_set_bool, pointer(self.status), byref(self.event)))
+        self.signaled = False
+        self.event = create_event(self._set_signaled)
+
+    def _set_signaled(self):
+        self.signaled = True
 
     def __del__(self):
-        check_status(system_table.BootServices.contents.CloseEvent(self.event))
+        close_event(self.event)
 
 class EFI_LOADED_IMAGE_PROTOCOL(Protocol):
     """EFI Loaded Image Protocol"""

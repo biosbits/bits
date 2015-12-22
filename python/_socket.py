@@ -103,7 +103,7 @@ def _init_sockets():
         return
     _start_config()
     # Spin until configuration complete
-    while not _done_event.status:
+    while not _done_event.signaled:
         pass
     data = efi.EFI_IP4_IPCONFIG_DATA()
     size = efi.UINTN(sizeof(data))
@@ -201,12 +201,12 @@ class socket(object):
         elapses, raises socket.timeout.  If the token completes, checks
         ct.Status for errors."""
         if self.timeout < 0.0:
-            while not es.status:
+            while not es.signaled:
                 efi.check_status(self._tcp4.Poll(self._tcp4))
         else:
             start = time.time()
             attempt_cancel = True
-            while not es.status:
+            while not es.signaled:
                 if attempt_cancel and (time.time() - start >= self.timeout):
                     status = self._tcp4.Cancel(self._tcp4, byref(ct))
                     if status == efi.EFI_NOT_FOUND:
