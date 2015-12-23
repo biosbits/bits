@@ -40,6 +40,7 @@ __all__ = [
     "SOCK_STREAM", "SOCK_DGRAM", "SOCK_RAW",
     "IPPROTO_IP", "IPPROTO_TCP", "IPPROTO_UDP",
     "AI_PASSIVE",
+    "SHUT_RD", "SHUT_WR", "SHUT_RDWR",
     "socket", "SocketType", "has_ipv6",
     "gethostbyname", "gethostbyname_ex", "gethostbyaddr", "gethostname",
     "getprotobyname", "getservbyname", "getservbyport", "getaddrinfo",
