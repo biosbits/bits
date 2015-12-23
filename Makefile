@@ -217,8 +217,8 @@ pylibs:=\
 	httplib.py \
 	inspect.py \
 	keyword.py \
-	locale.py \
 	linecache.py \
+	locale.py \
 	logging/__init__.py \
 	mimetools.py \
 	mimetypes.py \
@@ -255,9 +255,9 @@ pylibs:=\
 	traceback.py \
 	types.py \
 	unittest \
-	urlparse.py \
 	urllib.py \
 	urllib2.py \
+	urlparse.py \
 	UserDict.py \
 	uuid.py \
 	warnings.py \
