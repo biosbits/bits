@@ -40,6 +40,7 @@ from efikeys import *
 import redirect
 import os
 import sys as _sys
+import traceback
 import ttypager
 import uuid
 
@@ -667,15 +668,29 @@ class event_signal(object):
 
     The caller must ensure that the event does not get signaled after the
     event_signal gets destroyed."""
-    def __init__(self):
+    def __init__(self, abort=None):
         self.signaled = False
-        self.event = create_event(self._set_signaled)
+        self.closed = False
+        self.event = create_event(self._set_signaled, abort=abort)
 
     def _set_signaled(self):
         self.signaled = True
 
+    def close(self):
+        if not self.closed:
+            close_event(self.event)
+        self.closed = True
+
     def __del__(self):
-        close_event(self.event)
+        self.close()
+
+    def __enter__(self):
+        if self.closed:
+            raise ValueError("Cannot enter context with closed event")
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
 class EFI_LOADED_IMAGE_PROTOCOL(Protocol):
     """EFI Loaded Image Protocol"""
@@ -1728,14 +1743,15 @@ EFI_PCI_IO_PROTOCOL._fields_ = [
 ]
 
 _event_handlers = {}
+_event_exiting = False
 
 def _event_callback(event_value):
     global _event_handlers
-    _event_handlers[event_value]()
+    _event_handlers[event_value][0]()
 
 _efi._set_event_callback(_event_callback)
 
-def create_event(handler, timer=False, tpl=TPL_CALLBACK):
+def create_event(handler, timer=False, tpl=TPL_CALLBACK, abort=None):
     """Create an EFI_EVENT with the specified Python handler
 
     The event always has type EVT_NOTIFY_SIGNAL. Pass timer=True to
@@ -1744,9 +1760,15 @@ def create_event(handler, timer=False, tpl=TPL_CALLBACK):
     tpl specifies the TPL for the callback: either TPL_CALLBACK (default) or
     TPL_NOTIFY.
 
+    abort provides a callback to be called if cleaning up all events before
+    exiting Python.  Supply an abort callback if you need to tell some EFI
+    object not to touch this event or associated data.
+
     Returns the EFI_EVENT.  Do not close directly; always call
     efi.close_event."""
-    global _event_handlers
+    global _event_handlers, _event_exiting
+    if _event_exiting:
+        raise RuntimeError("Attempt to create_event while cleaning up events")
     type = EVT_NOTIFY_SIGNAL
     if timer:
         type |= EVT_TIMER
@@ -1754,7 +1776,7 @@ def create_event(handler, timer=False, tpl=TPL_CALLBACK):
     notify = cast(c_void_p(_efi._c_event_callback), EFI_EVENT_NOTIFY)
     # Safe to create before adding to handlers; nothing can signal it yet
     check_status(system_table.BootServices.contents.CreateEvent(type, tpl, notify, None, byref(event)))
-    _event_handlers[event.value] = handler
+    _event_handlers[event.value] = handler, abort
     return event
 
 def close_event(event):
@@ -1766,9 +1788,36 @@ def close_event(event):
 
 @atexit.register
 def close_all_events():
-    global _event_handlers
-    for event_value in _event_handlers.keys():
-        close_event(EFI_EVENT(event_value))
+    global _event_handlers, _event_exiting
+    _event_exiting = True
+    for event_value, (handler, abort) in _event_handlers.iteritems():
+        if abort is not None:
+            try:
+                abort()
+            except Exception as e:
+                print("Exception occurred during event abort function:")
+                print(traceback.format_exc())
+        try:
+            close_event(EFI_EVENT(event_value))
+        except Exception as e:
+            pass
+
+class event_set(object):
+    def __init__(self):
+        self.s = set()
+
+    def create_event(self, *args, **kwargs):
+        e = create_event(*args, **kwargs)
+        self.s.add(e.value)
+        return e
+
+    def close_event(self, e):
+        self.s.remove(e.value)
+        close_event(e)
+
+    def close_all(self):
+        for ev in self.s:
+            self.close_event(EFI_EVENT(ev))
 
 _key_handlers = {}
 

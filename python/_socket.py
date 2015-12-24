@@ -33,6 +33,7 @@ from ctypes import *
 import efi
 import struct
 import time
+import weakref
 
 __all__ = [
     "error", "gaierror", "herror", "timeout",
@@ -41,6 +42,7 @@ __all__ = [
     "IPPROTO_IP", "IPPROTO_TCP", "IPPROTO_UDP",
     "AI_PASSIVE",
     "SHUT_RD", "SHUT_WR", "SHUT_RDWR",
+    "SOL_SOCKET", "SO_REUSEADDR", "SO_ERROR",
     "socket", "SocketType", "has_ipv6",
     "gethostbyname", "gethostbyname_ex", "gethostbyaddr", "gethostname",
     "getprotobyname", "getservbyname", "getservbyport", "getaddrinfo",
@@ -75,6 +77,10 @@ AI_PASSIVE = 0x1
 
 SHUT_RD, SHUT_WR, SHUT_RDWR = range(3)
 
+SOL_SOCKET = 1
+SO_REUSEADDR = 2
+SO_ERROR = 4
+
 _configuration_started = False
 _initialized = False
 
@@ -93,10 +99,14 @@ def _start_config():
     _tcp4sbp = efi.EFI_TCP4_SERVICE_BINDING_PROTOCOL.from_handle(handles[0])
 
     _done_event = efi.event_signal()
-    _reconfig_event = efi.event_signal()
+    _reconfig_event = efi.event_signal(abort=_stop_config)
     efi.check_status(_ip4cp.Start(_ip4cp, _done_event.event, _reconfig_event.event))
     print("IP configuration started")
     _configuration_started = True
+
+def _stop_config():
+    global _ip4cp
+    efi.check_status(_ip4cp.Stop(_ip4cp))
 
 def _init_sockets():
     global _initialized, _ip4cp, _done_event, _ip_address, _subnet_mask, _routes
@@ -118,6 +128,15 @@ def _init_sockets():
     _routes = [efi.EFI_IP4_ROUTE_TABLE.from_buffer_copy(data.RouteTable[i]) for i in range(data.RouteTableSize)]
     print("IP configuration complete: {}/{}".format(data.StationAddress, data.SubnetMask))
     _initialized = True
+
+_socket_filenos = weakref.WeakValueDictionary()
+
+def _to_socket(s):
+    global _socket_filenos
+    try:
+        return _socket_filenos[s]
+    except KeyError as e:
+        return _socket_filenos[s.fileno()]
 
 class socket(object):
     """socket([family[, type[, proto]]]) -> socket object
@@ -160,7 +179,7 @@ class socket(object):
 
      [*] not available on all platforms!"""
     def __init__(self, family=AF_INET, type=SOCK_STREAM, proto=0, _handle=None):
-        global _default_timeout, _tcp4sbp
+        global _default_timeout, _socket_filenos, _tcp4sbp
         _init_sockets()
         if family != AF_INET:
             raise error("Only AF_INET supported")
@@ -172,15 +191,27 @@ class socket(object):
         self.type = type
         self.proto = proto
         self.timeout = _default_timeout
+        self._accept_queue = []
+        self._accept_running = False
+        self._recv_queue = []
+        self._recv_running = False
+        self._recv_shutdown = False
+        self._is_listen_socket = False
         if _handle is None:
             self._tcp4 = _tcp4sbp.child()
+            self._connect_status = None
         else:
             self._tcp4 = efi.EFI_TCP4_PROTOCOL.from_handle(_handle)
+            self._connect_status = 0
+        self._events = efi.event_set()
+        self._aborted = False
+        _socket_filenos[id(self)] = self
 
     def __del__(self):
         global _tcp4sbp
         # Only clean up if __init__ finished and we have a protocol to destroy
         if hasattr(self, "_tcp4"):
+            self._abort()
             efi.check_status(_tcp4sbp.DestroyChild(_tcp4sbp, self._tcp4._handle))
 
     def __repr__(self):
@@ -195,31 +226,31 @@ class socket(object):
         efi.check_status(self._tcp4.GetModeData(self._tcp4, byref(tcp4_state), byref(tcp4_config_data), byref(ip4_mode_data), byref(mnp_config_data), byref(snp_mode_data)))
         return tcp4_config_data
 
-    def _wait(self, es, ct):
-        """Spin until the specified completion token completes or timeout elapses
+    def _abort(self):
+        if self._aborted:
+            return
+        # This cancels any outstanding completion tokens, to avoid accesses to
+        # memory or events that we're about to free.
+        efi.check_status(self._tcp4.Configure(self._tcp4, None))
+        self._events.close_all()
+        self._aborted = True
 
-        es is an efi.event_signal; ct is a completion token.  If timeout
-        elapses, raises socket.timeout.  If the token completes, checks
-        ct.Status for errors."""
-        if self.timeout < 0.0:
-            while not es.signaled:
-                efi.check_status(self._tcp4.Poll(self._tcp4))
+    def _read_ready(self):
+        if self._is_listen_socket:
+            if self._accept_queue:
+                return True
+            self._maybe_start_accept()
+            return False
         else:
-            start = time.time()
-            attempt_cancel = True
-            while not es.signaled:
-                if attempt_cancel and (time.time() - start >= self.timeout):
-                    status = self._tcp4.Cancel(self._tcp4, byref(ct))
-                    if status == efi.EFI_NOT_FOUND:
-                        pass # Keep waiting for es.status
-                    elif status == efi.EFI_UNSUPPORTED:
-                        print("Warning: socket timeout expired but EFI can't Cancel; ignoring timeout")
-                        attempt_cancel = False
-                    else:
-                        efi.check_status(status)
-                        raise timeout("timed out")
-                efi.check_status(self._tcp4.Poll(self._tcp4))
-        efi.check_status(ct.Status)
+            if self._recv_queue or self._recv_shutdown:
+                return True
+            self._maybe_start_recv()
+            return False
+
+    def _write_ready(self):
+        if self._connect_status is None:
+            self._poll()
+        return self._connect_status is not None
 
     def accept(self):
         """accept() -> (socket object, address info)
@@ -227,13 +258,18 @@ class socket(object):
         Wait for an incoming connection.  Return a new socket representing the
         connection, and the address of the client.  For IP sockets, the address
         info is a pair (hostaddr, port)."""
-        e = efi.event_signal()
-        token = efi.EFI_TCP4_LISTEN_TOKEN()
-        token.CompletionToken.Event = e.event
-        efi.check_status(self._tcp4.Accept(self._tcp4, byref(token)))
-        self._wait(e, token.CompletionToken)
-        s = socket(family=self.family, type=self.type, proto=self.proto, _handle=token.NewChildHandle)
-        return s, s.getpeername()
+        if not self._is_listen_socket:
+            raise error("accept() called without listen()")
+        start = time.time()
+        while not self._read_ready():
+            if self.timeout >= 0 and (time.time() - start >= self.timeout):
+                raise timeout(11, "timed out") # EAGAIN
+        success, value = self._accept_queue.pop(0)
+        if success:
+            s = socket(family=self.family, type=self.type, proto=self.proto, _handle=value)
+            return s, s.getpeername()
+        else:
+            efi.check_status(value)
 
     def bind(self, addr):
         """bind(address)
@@ -248,22 +284,25 @@ class socket(object):
         self._bind_ip = ip
         self._bind_port = port
 
-    def _close(self, abort=True):
-        if hasattr(self, "closed") and self.closed:
-            return
-        e = efi.event_signal()
-        token = efi.EFI_TCP4_CLOSE_TOKEN()
-        token.CompletionToken.Event = e.event
-        token.AbortOnClose = abort
-        efi.check_status(self._tcp4.Close(self._tcp4, byref(token)))
-        self._wait(e, token.CompletionToken)
-        self.closed = True
-
     def close(self):
         """"close()
 
         Close the socket.  It cannot be used after this call."""
-        self._close()
+        if hasattr(self, "closed") and self.closed:
+            return
+        token = efi.EFI_TCP4_CLOSE_TOKEN()
+        def callback():
+            if token.CompletionToken.Status:
+                print("EFI_TCP4_PROTOCOL Close completed with an error:")
+                print(efi.EFIException(token.CompletionToken.Status))
+            self._events.close_event(efi.EFI_EVENT(token.CompletionToken.Event))
+        token.CompletionToken.Event = self._events.create_event(callback, abort=self._abort)
+        token.AbortOnClose = False
+        status = self._tcp4.Close(self._tcp4, byref(token))
+        if status:
+            self._events.close_event(efi.EFI_EVENT(token.CompletionToken.Event))
+            efi.check_status(status)
+        self.closed = True
 
     def connect(self, addr):
         """connect(address)
@@ -271,6 +310,13 @@ class socket(object):
         Connect the socket to a remote address.  For IP sockets, the address
         is a pair (host, port)."""
         global _ip_address, _subnet_mask, _routes
+        if self._is_listen_socket:
+            raise error("connect() called after listen()")
+        if self._connect_status is not None:
+            if self._connect_status:
+                raise error(103, "Connection aborted") # ECONNABORTED
+            else:
+                raise error(106, "Already connected") # EISCONN
         host, port = addr
         ip = efi.EFI_IPv4_ADDRESS.from_buffer_copy(inet_aton(gethostbyname(host)))
         data = efi.EFI_TCP4_CONFIG_DATA()
@@ -302,11 +348,25 @@ class socket(object):
             if status != efi.EFI_ACCESS_DENIED:
                 efi.check_status(status)
 
-        e = efi.event_signal()
         token = efi.EFI_TCP4_CONNECTION_TOKEN()
-        token.CompletionToken.Event = e.event
-        efi.check_status(self._tcp4.Connect(self._tcp4, byref(token)))
-        self._wait(e, token.CompletionToken)
+        def callback():
+            self._connect_status = token.CompletionToken.Status
+            self._events.close_event(efi.EFI_EVENT(token.CompletionToken.Event))
+        token.CompletionToken.Event = self._events.create_event(callback, abort=self._abort)
+        status = self._tcp4.Connect(self._tcp4, byref(token))
+        if status:
+            token.CompletionToken.Status = status
+            callback()
+
+        if self.timeout == 0:
+            raise error(115, "Operation now in progress") # EINPROGRESS
+        start = time.time()
+        while (self.timeout < 0) or (time.time() - start < self.timeout):
+            if self._connect_status is not None:
+                efi.check_status(self._connect_status)
+                return
+            self._poll()
+        raise timeout(11, "timed out") # EAGAIN
 
     def connect_ex(self, addr):
         """connect_ex(address) -> errno
@@ -319,12 +379,16 @@ class socket(object):
             return 5 # EIO
         except timeout as e:
             return 11 # EAGAIN
+        except error as e:
+            if e.errno is not None:
+                return e.errno
+            return 5 # EIO
 
     def fileno(self):
         """fileno() -> integer
 
         Return the integer file descriptor of the socket."""
-        raise NotImplementedError("socket.fileno() not supported")
+        return id(self)
 
     def getpeername(self):
         """getpeername() -> address info
@@ -339,8 +403,16 @@ class socket(object):
 
         Return the address of the local endpoint.  For IP sockets, the address
         info is a pair (hostaddr, port)."""
-        config = self._get_config()
-        return str(config.AccessPoint.StationAddress), config.AccessPoint.StationPort
+        try:
+            config = self._get_config()
+            return str(config.AccessPoint.StationAddress), config.AccessPoint.StationPort
+        except efi.EFIException as e:
+            if e.args[0] == efi.EFI_NOT_STARTED:
+                try:
+                    return str(self._bind_ip), self._bind_port
+                except AttributeError as e:
+                    return '0.0.0.0', 0
+            raise
 
     def getsockopt(self, level, option, buffersize=0):
         """getsockopt(level, option[, buffersize]) -> value
@@ -348,7 +420,11 @@ class socket(object):
         Get a socket option.  See the Unix manual for level and option.
         If a nonzero buffersize argument is given, the return value is a
         string of that length; otherwise it is an integer."""
-        raise error("socket.getsockopt not supported")
+        if (level, option) == (SOL_SOCKET, SO_ERROR):
+            e = self._connect_status
+            self._connect_status = 0
+            return e
+        raise error("socket.getsockopt({}, {}) not supported".format(level, option))
 
     def listen(self, backlog):
         """listen(backlog)
@@ -359,6 +435,8 @@ class socket(object):
         connections."""
         # FIXME: Use queue depth as MaxSynBackLog
         global _subnet_mask, _routes
+        if self._connect_status is not None:
+            raise error("listen() called after connect()")
         if backlog < 0:
             backlog = 0
         data = efi.EFI_TCP4_CONFIG_DATA()
@@ -392,6 +470,67 @@ class socket(object):
             if status != efi.EFI_ACCESS_DENIED:
                 efi.check_status(status)
 
+        self._is_listen_socket = True
+
+    def _poll(self):
+        status = self._tcp4.Poll(self._tcp4)
+        if status == efi.EFI_NOT_READY:
+            return
+        efi.check_status(status)
+
+    def _maybe_start_accept(self):
+        if self._accept_running:
+            self._poll()
+            return
+        token = efi.EFI_TCP4_LISTEN_TOKEN()
+        def callback():
+            if token.CompletionToken.Status:
+                self._accept_queue.append((False, token.CompletionToken.Status))
+            else:
+                self._accept_queue.append((True, token.NewChildHandle))
+            self._accept_running = False
+            self._events.close_event(efi.EFI_EVENT(token.CompletionToken.Event))
+        token.CompletionToken.Event = self._events.create_event(callback, abort=self._abort)
+        self._accept_running = True
+        status = self._tcp4.Accept(self._tcp4, byref(token))
+        if status:
+            token.CompletionToken.Status = status
+            callback()
+
+    def _maybe_start_recv(self):
+        if self._recv_running:
+            self._poll()
+            return
+        if self._recv_shutdown:
+            return
+        buf = create_string_buffer(0)
+        resize(buf, 65536)
+        rx = efi.EFI_TCP4_RECEIVE_DATA()
+        rx.DataLength = sizeof(buf)
+        rx.FragmentCount = 1
+        rx.FragmentTable[0].FragmentLength = sizeof(buf)
+        rx.FragmentTable[0].FragmentBuffer = addressof(buf)
+        token = efi.EFI_TCP4_IO_TOKEN()
+        def callback():
+            if token.CompletionToken.Status:
+                if token.CompletionToken.Status == efi.EFI_CONNECTION_FIN:
+                    self._recv_shutdown = True
+                else:
+                    self._recv_queue.append(token.CompletionToken.Status)
+            else:
+                if sizeof(buf) != rx.DataLength:
+                    resize(buf, rx.DataLength)
+                self._recv_queue.append(buf)
+            self._recv_running = False
+            self._events.close_event(efi.EFI_EVENT(token.CompletionToken.Event))
+        token.CompletionToken.Event = self._events.create_event(callback, abort=self._abort)
+        token.Packet.RxData = pointer(rx)
+        self._recv_running = True
+        status = self._tcp4.Receive(self._tcp4, byref(token))
+        if status:
+            token.CompletionToken.Status = status
+            callback()
+
     def recv(self, buflen, flags=0):
         """recv(buffersize[, flags]) -> data
 
@@ -421,19 +560,33 @@ class socket(object):
                 nbytes = sizeof(buffer)
             except TypeError as e:
                 nbytes = len(buffer)
-        cbuf = (c_uint8 * nbytes).from_buffer(buffer)
-        rx = efi.EFI_TCP4_RECEIVE_DATA()
-        rx.DataLength = nbytes
-        rx.FragmentCount = 1
-        rx.FragmentTable[0].FragmentLength = nbytes
-        rx.FragmentTable[0].FragmentBuffer = addressof(cbuf)
-        e = efi.event_signal()
-        token = efi.EFI_TCP4_IO_TOKEN()
-        token.CompletionToken.Event = e.event
-        token.Packet.RxData = pointer(rx)
-        efi.check_status(self._tcp4.Receive(self._tcp4, byref(token)))
-        self._wait(e, token.CompletionToken)
-        return rx.DataLength
+        start = time.time()
+        while not self._read_ready():
+            if self.timeout >= 0 and (time.time() - start >= self.timeout):
+                raise timeout(11, "timed out") # EAGAIN
+        nbytes_read = 0
+        dest = (c_uint8 * nbytes).from_buffer(buffer)
+        while self._recv_queue and nbytes_read != nbytes:
+            src = self._recv_queue[0]
+            if isinstance(src, (int, long)):
+                # Error; return it if we haven't yet collected any data
+                if nbytes_read:
+                    break
+                efi.check_status(src)
+            elif nbytes_read + sizeof(src) > nbytes:
+                # Split src
+                nbytes_to_copy = nbytes - nbytes_read
+                memmove(addressof(dest) + nbytes_read, addressof(src), nbytes_to_copy)
+                newsrc = create_string_buffer(sizeof(src) - nbytes_to_copy)
+                memmove(addressof(newsrc), addressof(src) + nbytes_to_copy, sizeof(newsrc))
+                self._recv_queue[0] = newsrc
+                nbytes_read = nbytes
+            else:
+                # Copy the entire src
+                memmove(addressof(dest) + nbytes_read, addressof(src), sizeof(src))
+                self._recv_queue.pop(0)
+                nbytes_read += sizeof(src)
+        return nbytes_read
 
     def recvfrom(self, buffersize, flags=0):
         """recvfrom(buffersize[, flags]) -> (data, address info)
@@ -454,20 +607,30 @@ class socket(object):
         argument, see the Unix manual.  This calls send() repeatedly
         until all data is sent.  If an error occurs, it's impossible
         to tell how much data has been sent."""
+        if isinstance(data, memoryview):
+            data = data.tobytes() # ctypes can't handle memoryview directly
+        data = (c_uint8 * len(data)).from_buffer_copy(data)
         tx = efi.EFI_TCP4_TRANSMIT_DATA()
         tx.DataLength = len(data)
         tx.FragmentCount = 1
         tx.FragmentTable[0].FragmentLength = len(data)
-        if isinstance(data, memoryview):
-            data = data.tobytes()
-        ptr = c_char_p(data)
-        tx.FragmentTable[0].FragmentBuffer = cast(ptr, c_void_p)
-        e = efi.event_signal()
+        tx.FragmentTable[0].FragmentBuffer = cast(data, c_void_p)
         token = efi.EFI_TCP4_IO_TOKEN()
-        token.CompletionToken.Event = e.event
+        send_status = []
+        def callback():
+            _ = data, tx # Reference objects EFI will access, to keep them alive
+            send_status.append(token.CompletionToken.Status)
+            self._events.close_event(efi.EFI_EVENT(token.CompletionToken.Event))
+        token.CompletionToken.Event = self._events.create_event(callback, abort=self._abort)
         token.Packet.TxData = pointer(tx)
-        efi.check_status(self._tcp4.Transmit(self._tcp4, byref(token)))
-        self._wait(e, token.CompletionToken)
+        status = self._tcp4.Transmit(self._tcp4, byref(token))
+        if status:
+            self._events.close_event(efi.EFI_EVENT(token.CompletionToken.Event))
+            efi.check_status(status)
+            return
+        while not send_status:
+            self._poll()
+        efi.check_status(send_status[0])
 
     def send(self, data, flags=0):
         """send(data[, flags]) -> count
@@ -494,7 +657,7 @@ class socket(object):
         Shut down the reading side of the socket (flag == SHUT_RD), the writing side
         of the socket (flag == SHUT_WR), or both ends (flag == SHUT_RDWR)."""
         if how == SHUT_RDWR:
-            self._close(abort=False)
+            self.close()
         else:
             raise error("socket.shutdown(how={}) not supported".format(how))
 
@@ -522,7 +685,13 @@ class socket(object):
 
         Set a socket option.  See the Unix manual for level and option.
         The value argument can either be an integer or a string."""
-        raise error("socket.setsockopt not supported")
+        # Accept and ignore SO_REUSEADDR, because common users of Python
+        # sockets reference it.
+        # FIXME: find some way to actually implement this for EFI; without
+        # this, listening servers cannot re-run immediately on the same port.
+        if (level, option) == (SOL_SOCKET, SO_REUSEADDR):
+           return
+        raise error("socket.setsockopt({}, {}, {}) not supported".format(level, option, value))
 
     def settimeout(self, timeout):
         """settimeout(timeout)
