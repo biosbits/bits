@@ -267,7 +267,7 @@ def _readline(prompt=""):
                         if history_index < len(history):
                             history_index += 1
                             if history_index == len(history):
-                                line_buffer, pos = history_state.get(history_index)
+                                line_buffer, pos = history_state.get(history_index, ('', 0))
                             else:
                                 line_buffer, pos = history_state.get(history_index, (history[history_index], len(history[history_index])))
                     elif c == key(bits.input.KEY_UP) or c == ctrl('p'):
