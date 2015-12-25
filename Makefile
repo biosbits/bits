@@ -57,7 +57,6 @@ python-host-src:=$(workdir)/python-host
 
 export GRUB_CONTRIB:=$(grub-contrib-src)
 grub-prefix:=$(workdir)/grub-inst
-grub-libdir:=$(grub-prefix)/lib
 target:=$(workdir)/bits-$(buildnum)
 srcdir:=$(target)/boot/src
 
@@ -107,13 +106,13 @@ common-modules:=fat part_msdos part_gpt iso9660
 
 build-grub-%: autogen-grub
 	$(Q)mkdir '$(workdir)/grub-build-$*'
-	$(Q)cd '$(workdir)/grub-build-$*' && '$(grub-src)/configure' --prefix='$(grub-prefix)' --libdir='$(grub-libdir)' --program-prefix= --target=$(firstword $(subst -, ,$*)) --with-platform=$(lastword $(subst -, ,$*)) --disable-nls --disable-efiemu --disable-grub-emu-usb --disable-grub-emu-sdl --disable-grub-mkfont --disable-grub-mount --disable-device-mapper --disable-libzfs MAKEINFO=/bin/true TARGET_CFLAGS='-Os -Wno-discarded-array-qualifiers'
+	$(Q)cd '$(workdir)/grub-build-$*' && '$(grub-src)/configure' --prefix='$(grub-prefix)-$*' --libdir='$(grub-prefix)/lib' --program-prefix= --target=$(firstword $(subst -, ,$*)) --with-platform=$(lastword $(subst -, ,$*)) --disable-nls --disable-efiemu --disable-grub-emu-usb --disable-grub-emu-sdl --disable-grub-mkfont --disable-grub-mount --disable-device-mapper --disable-libzfs MAKEINFO=/bin/true TARGET_CFLAGS='-Os -Wno-discarded-array-qualifiers'
 	$(Q)cd '$(workdir)/grub-build-$*' && $(MAKE) install
 	$(Q)mkdir -p '$(target)/boot/grub/$*'
 	$(Q)for suffix in img lst mod ; do \
-	    cp '$(grub-libdir)/grub/$*/'*.$$suffix '$(target)/boot/grub/$*/' ;\
+	    cp '$(grub-prefix)/lib/grub/$*/'*.$$suffix '$(target)/boot/grub/$*/' ;\
 	done
-	$(Q)'$(grub-prefix)/bin/grub-mkimage' -O $* --output='$(target)/$($*-img)' --prefix=/boot/grub $($*-extra-modules) $(common-modules)
+	$(Q)'$(grub-prefix)-$*/bin/grub-mkimage' -O $* --output='$(target)/$($*-img)' --prefix=/boot/grub $($*-extra-modules) $(common-modules)
 
 # Workaround for syslinux 5 bug booting lnxboot.img
 fixup-grub-i386-pc: build-grub-i386-pc
@@ -302,7 +301,7 @@ ifneq ($(LOCAL),)
 	$(Q)cp -a '$(BITS)/local-files/.' '$(target)/'
 endif
 	$(Q)rm -f '$(BITS)/bits-$(buildnum).iso' '$(BITS)/bits-$(buildnum).zip'
-	$(Q)'$(grub-prefix)/bin/grub-mkrescue' -o '$(BITS)/bits-$(buildnum).iso' '$(target)'
+	$(Q)'$(grub-prefix)-x86_64-efi/bin/grub-mkrescue' -o '$(BITS)/bits-$(buildnum).iso' '$(target)'
 	$(Q)cp '$(BITS)/bits-$(buildnum).iso' '$(BITS)/bits-latest.iso'
 	$(Q)cp '$(BITS)/bits-$(buildnum).iso' '$(target)/'
 	$(Q)cd '$(workdir)' && zip -qr '$(BITS)/bits-$(buildnum).zip' 'bits-$(buildnum)'
