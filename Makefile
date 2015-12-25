@@ -187,6 +187,7 @@ pylibs:=\
 	argparse.py \
 	atexit.py \
 	base64.py \
+	BaseHTTPServer.py \
 	bdb.py \
 	bisect.py \
 	cgi.py \
@@ -240,6 +241,7 @@ pylibs:=\
 	shlex.py \
 	shutil.py \
 	socket.py \
+	SocketServer.py \
 	sre_compile.py \
 	sre_constants.py \
 	sre_parse.py \
