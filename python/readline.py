@@ -1,4 +1,4 @@
-# Copyright (c) 2013, Intel Corporation
+# Copyright (c) 2015, Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,8 @@ line_x = []
 line_y = []
 buffer_max = 0
 history = []
+kill_ring = [] # Most recent last
+kill_accumulate = False
 ctrl_o_index = None
 completer = None
 
@@ -66,6 +68,27 @@ def delete_char_left(line_buffer, pos):
         return line_buffer, pos
     line_buffer, temp_pos = delete_char(line_buffer, pos - 1)
     return line_buffer, pos - 1
+
+def insert_string(line_buffer, s, pos):
+    global buffer_max
+    chars_remaining = buffer_max - len(line_buffer)
+    if chars_remaining < len(s):
+        s = s[:chars_remaining]
+    line_buffer = line_buffer[:pos] + s + line_buffer[pos:]
+    insert_start = pos
+    pos = pos + len(s)
+    return line_buffer, insert_start, pos
+
+def add_to_kill_ring(s, to_right):
+    global kill_ring, kill_accumulate
+    if kill_accumulate:
+        if to_right:
+            kill_ring[-1] = kill_ring[-1] + s
+        else:
+            kill_ring[-1] = s + kill_ring[-1]
+    else:
+        kill_ring.append(s)
+    kill_accumulate = True
 
 def print_buffer(line_buffer, x, y, term):
     global width, height, line_y
@@ -136,7 +159,7 @@ def add_key_hook(key, func):
     key_hooks[key] = func
 
 def _readline(prompt=""):
-    global width, height, line_x, line_y, buffer_max, history, ctrl_o_index, completer
+    global width, height, line_x, line_y, buffer_max, history, kill_ring, kill_accumulate, ctrl_o_index, completer
 
     with redirect.nolog():
         with pager.nopager():
@@ -161,6 +184,8 @@ def _readline(prompt=""):
             history_index = len(history)
             history_state = dict()
             completer_state = 0
+            last_yank_start = None
+            kill_accumulate = False
 
             if ctrl_o_index is not None:
                 if ctrl_o_index < len(history):
@@ -193,6 +218,12 @@ def _readline(prompt=""):
                     key = bits.input.key
                     def ctrl(k):
                         return key(k, ctrl=True)
+
+                    # Reset states that depend on last key
+                    if c != key('y', alt=True):
+                        last_yank_start = None
+                    if c not in (ctrl('k'), ctrl('u'), ctrl('w')):
+                        kill_accumulate = False
 
                     if c == key('\r') or c == key('\n') or c == ctrl('o'):
                         if line_buffer or (history and history[-1]):
@@ -255,7 +286,9 @@ def _readline(prompt=""):
                                 completer_state = 0
                     elif c == ctrl('k'):
                         # delete from current to end of line
+                        killed_text = line_buffer[pos:]
                         line_buffer = line_buffer[:pos]
+                        add_to_kill_ring(killed_text, to_right=True)
                     elif c == ctrl('l'):
                         # clear screen
                         bits.clear_screen()
@@ -277,8 +310,10 @@ def _readline(prompt=""):
                             line_buffer, pos = history_state.get(history_index, (history[history_index], len(history[history_index])))
                     elif c == ctrl('u'):
                         # delete from current to beginning of line
+                        killed_text = line_buffer[:pos]
                         line_buffer = line_buffer[pos:]
                         pos = 0
+                        add_to_kill_ring(killed_text, to_right=False)
                     elif c == ctrl(bits.input.KEY_LEFT):
                         # Move left by word
                         while pos != 0 and not line_buffer[pos-1].isalnum():
@@ -300,7 +335,21 @@ def _readline(prompt=""):
                             pos -= 1
                         while pos != 0 and line_buffer[pos-1] != ' ':
                             pos -= 1
+                        killed_text = line_buffer[pos:cur]
                         line_buffer = line_buffer[:pos] + line_buffer[cur:]
+                        add_to_kill_ring(killed_text, to_right=False)
+                    elif c == ctrl('y'):
+                        # Yank
+                        if kill_ring:
+                            line_buffer, last_yank_start, pos = insert_string(line_buffer, kill_ring[-1], pos)
+                    elif c == key('y', alt=True):
+                        # If immediately after yank, rotate kill ring and yank
+                        # the new top instead.
+                        if last_yank_start is not None:
+                            line_buffer = line_buffer[:last_yank_start] + line_buffer[pos:]
+                            pos = last_yank_start
+                            kill_ring.insert(0, kill_ring.pop()) # Rotate
+                            line_buffer, last_yank_start, pos = insert_string(line_buffer, kill_ring[-1], pos)
                     elif c == ctrl('z') or c == key(bits.input.KEY_ESC):
                         if len(line_buffer) == 0:
                             return ""

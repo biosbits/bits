@@ -54,7 +54,8 @@ On an empty line, acts as end of file.  At the main Python prompt, this will
 exit the interactive interpreter.
 
 Ctrl-K:
-Delete ("Kill") from the cursor to the end of the line.
+Delete ("Kill") from the cursor to the end of the line.  Stores the text in
+the kill ring; see Ctrl-Y for details.
 
 Ctrl-L:
 Clear the screen.
@@ -67,10 +68,23 @@ history will remember blank lines (though not multiple consecutive blank
 lines).
 
 Ctrl-U:
-Delete from the cursor to the beginning of the line.
+Delete from the cursor to the beginning of the line.  Stores the text in the
+kill ring; see Ctrl-Y for details.
 
 Ctrl-W:
-Delete the previous word (back to the previous whitespace character).
+Delete the previous word (back to the previous whitespace character).  Stores
+the text in the kill ring; see Ctrl-Y for details.
+
+Ctrl-Y:
+Insert the most recently killed text (the top of the "kill ring") into the
+line at the current cursor position ("yank").  Keys that kill text (Ctrl-K,
+Ctrl-U, Ctrl-W) store that text at the top of the "kill ring"; repeated use of
+those keys with no intervening keys will accumulate more text into that same
+entry in the kill ring.
+
+Alt-Y:
+Immediately after a Ctrl-Y or Alt-Y, rotate the kill ring, and replace the
+previously yanked text with the new top of the kill ring.
 
 Ctrl-Z:
 On an empty line, acts as end of file.  At the main Python prompt, this will
