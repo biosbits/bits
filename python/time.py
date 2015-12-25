@@ -39,7 +39,6 @@ struct_time = namedtuple('struct_time', ['tm_year', 'tm_mon', 'tm_mday',
 #clock
 #ctime
 #daylight
-#gmtime
 
 def localtime(seconds = None):
     """
@@ -67,6 +66,10 @@ def localtime(seconds = None):
     ordinaldate = sum([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][0:loctime.tm_mon-1]) + loctime.tm_mday + leap_year
 
     return loctime._replace(tm_yday = ordinaldate)
+
+# Support gmtime for compatibility with callers.  Timezones intentionally
+# ignored; always assumes localtime matches UTC.
+gmtime = localtime
 
 #mktime
 
