@@ -37,6 +37,12 @@ Move cursor left by one character.
 Right or Ctrl-F:
 Move cursor right by one character.
 
+Ctrl-Left:
+Move cursor left by one word (sequence of alphanumeric characters).
+
+Ctrl-Right:
+Move cursor right by one word (sequence of alphanumeric characters).
+
 Up or Ctrl-P:
 Show the previous line in history.
 
@@ -64,7 +70,7 @@ Ctrl-U:
 Delete from the cursor to the beginning of the line.
 
 Ctrl-W:
-Delete the previous word.
+Delete the previous word (back to the previous whitespace character).
 
 Ctrl-Z:
 On an empty line, acts as end of file.  At the main Python prompt, this will

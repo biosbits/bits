@@ -279,8 +279,22 @@ def _readline(prompt=""):
                         # delete from current to beginning of line
                         line_buffer = line_buffer[pos:]
                         pos = 0
+                    elif c == ctrl(bits.input.KEY_LEFT):
+                        # Move left by word
+                        while pos != 0 and not line_buffer[pos-1].isalnum():
+                            pos -= 1
+                        while pos != 0 and line_buffer[pos-1].isalnum():
+                            pos -= 1
+                    elif c == ctrl(bits.input.KEY_RIGHT):
+                        # Move right by word
+                        end = len(line_buffer)
+                        while pos != end and not line_buffer[pos].isalnum():
+                            pos += 1
+                        while pos != end and line_buffer[pos].isalnum():
+                            pos += 1
                     elif c == ctrl('w'):
-                        # delete previous word
+                        # delete previous word; note that this uses a different
+                        # definition of "word" than Ctrl-Left and Ctrl-Right.
                         cur = pos
                         while pos != 0 and line_buffer[pos-1] == ' ':
                             pos -= 1
