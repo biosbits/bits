@@ -136,6 +136,7 @@ def init():
 
     with import_annotation("sys"):
         import sys
+    sys.argv = []
 
     with init_annotation("PCI Express MCFG detection"):
         try:
