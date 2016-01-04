@@ -1,3 +1,376 @@
+bits-2070
+=========
+
+Highlights of the new release:
+
+- BITS on EFI now supports TCP networking, including HTTP clients via
+  urllib2, and HTTP servers via BaseHTTPServer.  See below for details
+  and caveats.
+
+- BITS now has significantly improved Python and ACPI performance,
+  thanks to Python's optimized memory allocator.  This speeds up common
+  Python and ACPI operations significantly, including BITS boot time.
+  BITS can now boot in less than a second on virtual hardware.
+
+- BITS line-editing keys now work on EFI, and several more common
+  keybindings from readline now work in BITS.  Refer to
+  `Documentation/line-editing.txt` in the BITS distribution for full
+  input documentation.
+
+- Fix a hard-to-debug issue that led to crashes or malfunctions in FFI
+  calls between C and Python, caused by EFI interrupts during assembly
+  code corrupting stack data in the x86-64 POSIX ABI "red zone".
+
+- BITS now has a mailing list, bits@lists.01.org; see
+  https://lists.01.org/mailman/listinfo/bits to subscribe.
+
+Networking
+----------
+
+BITS on EFI now supports TCP networking, using the Python socket module
+and various modules built atop it.  On EFI systems that provide
+`EFI_IP4_CONFIG_PROTOCOL` and `EFI_TCP4_SERVICE_BINDING_PROTOCOL`, we
+implement a `_socket` module in Python with support for TCP sockets over
+IPv4.  We then include Python's higher-level socket module that runs on
+top of `_socket`.
+
+When constructing a socket for the first time, `_socket` will initialize
+the EFI network stack, which will typically use DHCP to obtain an
+address.
+
+Given a socket created with `s = socket.socket()`, you can establish
+an outbound connection with `s.connect(("ip.ad.dr.ess"), port)`, or
+create a server using `s.bind(("0.0.0.0", port))`, `s.listen(1)`, and
+`client_s, addr = s.accept()`.  Afterwards, use `recv` and `sendall`
+to communicate, or create a file-like object with `makefile`.  See the
+socket module documentation at
+https://docs.python.org/2.7/library/socket.html for more details.
+
+The efi module now includes the EFI protocols for IPv4 configuration,
+TCP over IPv4, and IPv4 DNS.  The current Python socket implementation
+only supports TCP over IPv4.  Also, as OVMF and other EFI systems do not
+include `EFI_DNS4_SERVICE_BINDING_PROTOCOL`, the socket implementation
+does not support hostname resolution (other than "localhost").
+
+Both blocking and non-blocking sockets work.  BITS now includes a safe
+Python interface to handle EFI events via callbacks, and uses this to
+implement sockets and the Python select module (`select.select` only).
+
+For the receive side, EFI has no way to ask for available data without
+retrieving that data, so BITS will always kick off an EFI Receive call
+in the background when checking for socket readiness with no data
+available, and buffer the received data to supply to the caller.  A
+blocking recv will wait for the data to come back; a non-blocking recv
+will raise a timeout after the configured socket timeout (possibly
+immediately), and a subsequent recv will return the data.  Only one
+outstanding Receive call will run at a time, and only if BITS does not
+already have a buffer of received data.
+
+For the transmit side, a connected socket will always show up as
+writable.  BITS does not buffer transmits itself, but instead always
+blocks until the EFI Transmit call signals its completion event.
+
+Non-blocking connect works as well; `select.select` on a connecting
+socket for write will block until the connect completes, and a
+subsequent call to `getsockopt(SOL_SOCKET, SO_ERROR)` will return (and
+clear) the connection status.
+
+For simplicity, do not attempt to reuse a caller's buffers for zero-copy
+networking; this is several-copy networking, optimized for simplicity
+and memory usage rather than performance.
+
+Building on this networking support, BITS now supports the Python
+urllib2 module and its dependencies, to function as a simple HTTP
+client.  This also includes the Python modules urllib, urlparse,
+httplib, mimetools, and rfc822.
+
+Since BITS does not include DNS support, using `urllib2.urlopen` on an
+URL with a hostname will fail.  An URL with an IP address works, as long
+as the server on the other end can handle a Host header with that IP
+address (which may fail with servers serving multiple domains using
+name-based virtual hosting).  As a simple test, connecting to a server
+run via python's SimpleHTTPServer module works, which makes it simple to
+transfer data from a separate host system into the BITS environment
+without rebooting.
+
+Since BITS does not include an SSL library, `urllib2.urlopen` does not
+support https URLs.
+
+urllib2's support for digest authentication uses the random module,
+which we don't yet support; add a stub random module with no functions,
+so that importing urllib2 will work, but attempting to use digest
+authentication will raise an exception when attempting to call
+non-existent functions in random.
+
+Likewise, mimetools imports tempfile, but only calls it from
+`mimetools.pipethrough` (which also calls the unsupported `os.popen`);
+add a stub tempfile module with no functions.  httplib uses
+`mimetools.Message`, which works.
+
+On the server side, BITS now supports the Python BaseHTTPServer module
+and its dependencies, to build simple HTTP servers.  This includes the
+Python modules base64, hashlib, cgi, mimetypes, shutil,
+`dummy_threading` (without actual threading support), and SocketServer.
+To build a simple HTTP server, define a class deriving from
+`BaseHTTPServer.BaseHTTPRequestHandler` that implements handler methods
+for GET (and POST if desired), and pass that class to
+`BaseHTTPServer.test`.  See the Python BaseHTTPServer documentation at
+https://docs.python.org/2/library/basehttpserver.html for details.
+
+Note that since the sockets support does not yet support `SO_REUSEADDR`
+(the flag exists for compatibility, but does not yet map to any
+underlying EFI functionality), attempting to stop and immediately
+restart a server on the same port will likely fail with an EFI
+exception, indicating that the port remains in use.
+
+Performance
+-----------
+
+BITS now enables Python's pymalloc allocator; this speeds up object
+allocations by an order of magnitude, which also affects common
+operations such as string concatenation.  This reduces BITS boot time by
+an order of magnitude (now boots in about a second on virtual hardware),
+and provides similar speedups in every part of BITS and Python.
+
+BITS also uses Python's small-object allocator to allocate small ACPI
+objects, which speeds up many ACPI operations.
+
+Several of the longest-running tests in BITS, which measured CPU
+frequencies for many seconds to ensure a stable reading, will now
+optimistically attempt to use less wall-clock time if they get a stable
+reading more quickly, speeding up the BITS testsuite in the common case.
+
+Line-editing keys
+-----------------
+
+BITS now supports a much more extensive set of line-editing keys at the
+Python interactive prompt, on both EFI and BIOS systems; all of these
+keys match the behaviors expected by readline-trained fingers.  Refer to
+`Documentation/line-editing.txt` in the BITS distribution for full input
+documentation.  Highlights include Ctrl-Left and Ctrl-Right to move the
+cursor by words, Ctrl-O to run and retrieve successive lines from
+history, Ctrl-W/Ctrl-K/Ctrl-U/Ctrl-Y/Alt-Y to kill (delete) and yank
+(paste) text, and Ctrl-C to interrupt Python code in progress (only on
+EFI).
+
+(Some of these keys previously worked on BIOS systems, but not on EFI due
+to input protocol limitations; BITS on EFI now supports and uses
+`EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL` to obtain keyboard input directly
+from the firmware.)
+
+Ctrl-C support uses `EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL` to register a
+key notify handler for Ctrl-C, which raises KeyboardInterrupt the next
+time the Python interpreter has control.  This allows aborting a
+long-running operation, which would otherwise require rebooting.  Note
+that this cannot interrupt a long-running operation in C code or in
+firmware, and that not all code in BITS cleans up perfectly after a
+KeyboardInterrupt exception.
+
+This introduces a new bits.input module to abstract keyboard input.  On
+EFI platforms, this uses the EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL; on
+non-EFI BIOS, this continues to use GRUB for input.
+
+Other enhancements
+------------------
+
+- testacpi: Speed up the ACPI `_PSS` test
+
+  Before spending a full second measuring the frequency of a CPU at a
+  given pstate, measure it for 100ms, and pass if we get the expected
+  result; only fall back to 1s if that fails.  This significantly speeds
+  up the pstate test, which we run as part of the default test suite.
+
+- pstate: Speed up the hardware pstate test
+
+  Before spending a full second measuring the frequency of a CPU at a
+  given pstate, measure it for 100ms, and pass if we get the expected
+  result; only fall back to 1s if that fails.  This significantly speeds
+  up the hardware pstate test, which we run as part of the default test
+  suite on supported CPUs.
+
+- Allow ACPI evaluation to read and write IO ports by default
+
+  Some systems, such as the third-generation Lenovo X1 Carbon, loop
+  forever performing IO-triggered SMIs during ACPI initialization; the
+  default behavior of blocking IO ports causes such systems to hang when
+  initializing ACPI.  Since we already allow memory accesses by default,
+  allow IO as well.
+
+  For compatibility and debugging, acpi.evaluate still supports the
+  `unsafe_io` keyword argument; `unsafe_io=False` will explicitly
+  disable IO port access, and `unsafe_io=True` acts as a no-op for
+  compatibility with existing code.
+
+- acpi: Implement OS port access functions in Python
+
+  Replace the C implementations of `AcpiOsReadPort` and
+  `AcpiOsWritePort` with calls to callback functions implemented in
+  Python.
+
+- acpi: In ACPICA initialization, don't switch the system into ACPI mode
+
+  With IO port accesses enabled by default, ACPICA now successfully
+  switches the system into ACPI mode during initialization; previously,
+  the IO write to make this transition got ignored.  On some systems,
+  switching into ACPI mode disables BIOS keyboard support, which BITS
+  relies on.  Explicitly disable this transition in ACPICA
+  initialization, to return to the previous BITS behavior and keep the
+  BIOS keyboard working.
+
+- ttypager: Show progress while collecting output
+
+  The pager collects output from writes to stdout, but doesn't display
+  anything until done.  Add a spinning progress indicator to help the
+  user tell the difference between long-running output generation and a
+  hang.
+
+- Turn on `Py_InspectFlag` so that `SystemExit` doesn't call C `exit()`
+
+  Without this flag, if code running in the interactive interpreter
+  raises `SystemExit`, the interpreter will call the C `exit()`
+  function, which will abort GRUB entirely.  With `Py_InspectFlag` set,
+  `SystemExit` will propagate like any other exception.  This then
+  allows calling modules intended as standalone programs and continuing
+  afterward.  Such calls may still want to catch `SystemExit` and
+  provide a more user-friendly result than a traceback.
+
+- init: Time the import and initialization of modules
+
+  In the process, always put timing start and end messages on separate
+  lines, so that a message printed between them will not break the
+  formatting.
+
+- efi: Add a safe event callback mechanism using `Py_AddPendingCall`
+
+  Since event callbacks can occur asynchronously, use a C callback that
+  invokes `Py_AddPendingCall`, rather than a Python ctypes callback.
+
+- efi: Support `EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL`
+
+- efi: Add GUIDs for EFI networking protocols
+
+- efi: Make `efi.show_available_protocols()` show output with the pager
+
+- testacpi: Test that all CPUs return the same `_PSS`
+
+- acpi: `AcpiGetTable` functions don't need full ACPI init
+
+  Just call the early tables-only initialization before running them.
+
+- python: Support compiling with `Py_DEBUG`; BITS does not enable
+  `Py_DEBUG` by default, but this allows developers to enable it at
+  build time for low-level Python debugging.
+
+- Provide file and line number for calls to `abort()`, to aid debugging
+
+- efi: Return `ConfigurationTableDict` as an `OrderedDict`
+
+  The order of configuration tables can potentially matter, so preserve
+  it.
+
+- Merge the acpica, smp, and bitsutil modules into the python module
+
+  This will allow calls from the other modules into the python module,
+  without creating a dependency cycle.
+
+- efi: Make `efi.exit()` invoke any Python atexit handlers before
+  exiting.  This provides an opportunity to clean up before exiting.
+  Note that not all EFI resource allocations perform such cleanup yet.
+
+- efi: Add constants for key scancodes
+
+- efi: Add a general keyboard callback mechanism
+
+  Call `RegisterKeyNotify` with a C callback that calls into Python;
+  once in Python, dispatch to a specific Python handler based on the
+  key.
+
+- efi: Add more known UUIDs from the UEFI specification
+
+- python: Implement `time.sleep`
+
+  Implemented as a busyloop in Python, rather than calling into C.  We
+  want to allow for background processing (such as events or keyboard
+  notify handlers), and we don't currently have any means of actually
+  sleeping while doing so.
+
+- python: Add `time.gmtime` for compatibility
+
+  Timezones intentionally ignored; always assumes localtime matches UTC.
+
+- python: Set `sys.argv=[]` by default for compatibility
+
+  Stock python sets `sys.argv` even when running the interactive
+  interpreter.  Some Python test functions check for arguments but don't
+  handle the case of `sys.argv` not existing at all.  Set `sys.argv` to
+  an empty list for compatibility.
+
+Bugfixes:
+
+- Fix a bug on x86-64 EFI that would occasionally cause a libffi call or
+  callback to malfunction (bad return value, `abort()`, or stack
+  corruption and crash), due to an EFI interrupt corrupting data left in
+  the red zone.  Assembly functions in libffi's support for the x86-64
+  POSIX ABI (as used between BITS C and Python code, such as calls to
+  ACPI) used the "red zone" defined by the ABI as scratch space;
+  however, EFI firmware does not follow the same ABI, and an EFI
+  interrupt can overwrite any data stored below the stack pointer.
+  Thus, an interrupt that occurred during the small regions of assembly
+  code relying on data in the red zone would cause rare, hard-to-debug
+  issues.
+
+  Fix these two libffi assembly routines (`ffi_call_unix64` and
+  `ffi_closure_unix64`) to not rely on the red zone remaining untouched
+  while they run; adjust the stack pointer to contain all scratch space,
+  and only access data above the stack pointer.
+
+- Disable GCC 5.2's new `-Wdiscarded-array-qualifiers` warning for GRUB
+
+  GRUB uses `-Werror`, and the GRUB 2.00 snapshot we use doesn't satisfy
+  this warning.  Pass `-Wno-discarded-array-qualifiers` to configure to
+  disable the warning.
+
+- testacpi: Fix typo in `_MAT` test
+
+- smbios: Fix field name typo
+
+  This caused an exception when decoding a `SystemEnclosure` with
+  contained elements.
+
+- testacpi: When testing ACPI `_PSS`, preserve the current pstate
+
+  Introduce a new `bits.preserve_msr()` context manager to preserve an
+  MSR on all CPUs around a block of code.
+
+- pstate: Preserve the current pstate around the hardware pstate test
+
+- Update URLs in documentation to https where available
+
+- efi: Save configuration tables to file decoded as GUID and pointer
+
+- Fix typos in PCIe error injection
+
+- Makefile: Fix a race condition between parallel grub install targets
+
+  Occasionally, the grub install targets for two platforms would both
+  try to install the same platform-independent script (e.g.
+  `grub-mkrescue`) at the same time to the same location, generating a
+  spurious failure saying the file already exists.  Fix by installing
+  the grub binaries for each platform to a separate temporary directory.
+
+- python: Fix line history navigation with Ctrl-O
+
+  Ctrl-O on a line in history submits the line and causes the next call
+  to readline to start with the following line from history.  That
+  initial state caused readline to not have a recorded state for the
+  line "after" all existing history (what would be a fresh new blank
+  line if Ctrl-O had not left the "vertical cursor" back in history).
+  Subsequently navigating down to the end of history would then raise an
+  exception.
+
+  Fix that downward navigation to materialize a fresh new blank line
+  when navigating down from the last line in history.
+
 bits-2005
 =========
 
