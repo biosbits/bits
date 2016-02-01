@@ -81,53 +81,107 @@ SOL_SOCKET = 1
 SO_REUSEADDR = 2
 SO_ERROR = 4
 
-_configuration_started = False
 _initialized = False
 
-def _start_config():
-    global _configuration_started, _ip4cp, _tcp4sbp, _done_event, _reconfig_event
-    if _configuration_started:
+def get_protocol(c):
+    return c.from_handle(efi.locate_handles(c.guid)[0])
+
+def try_get_protocol(c):
+    try:
+        return get_protocol(c)
+    except efi.EFIException as e:
+        if e.args[0] == efi.EFI_NOT_FOUND:
+            return None
+        raise
+
+def ip4c2p_get_configuration(early=False):
+    global _ip4c2p, _ip_address, _subnet_mask, _routes, _initialized
+    data = efi.EFI_IP4_CONFIG2_INTERFACE_INFO()
+    size = efi.UINTN(sizeof(data))
+    status = _ip4c2p.GetData(_ip4c2p, efi.Ip4Config2DataTypeInterfaceInfo, byref(size), byref(data))
+    if status == efi.EFI_BUFFER_TOO_SMALL:
+        resize(data, size.value)
+        status = _ip4c2p.GetData(_ip4c2p, efi.Ip4Config2DataTypeInterfaceInfo, byref(size), byref(data))
+    if early and status in (efi.EFI_NOT_READY, efi.EFI_NOT_FOUND):
         return
-
-    handles = list(efi.locate_handles(efi.EFI_IP4_CONFIG_PROTOCOL_GUID))
-    if not handles:
-        raise IOError("EFI_IP4_CONFIG_PROTOCOL not available")
-    _ip4cp = efi.EFI_IP4_CONFIG_PROTOCOL.from_handle(handles[0])
-    handles = list(efi.locate_handles(efi.EFI_TCP4_SERVICE_BINDING_PROTOCOL_GUID))
-    if not handles:
-        raise IOError("EFI_TCP4_SERVICE_BINDING_PROTOCOL not available")
-    _tcp4sbp = efi.EFI_TCP4_SERVICE_BINDING_PROTOCOL.from_handle(handles[0])
-
-    _done_event = efi.event_signal()
-    _reconfig_event = efi.event_signal(abort=_stop_config)
-    efi.check_status(_ip4cp.Start(_ip4cp, _done_event.event, _reconfig_event.event))
-    print("IP configuration started")
-    _configuration_started = True
-
-def _stop_config():
-    global _ip4cp
-    efi.check_status(_ip4cp.Stop(_ip4cp))
-
-def _init_sockets():
-    global _initialized, _ip4cp, _done_event, _ip_address, _subnet_mask, _routes
-    if _initialized:
+    efi.check_status(status)
+    if data.StationAddress == efi.EFI_IPv4_ADDRESS((0,0,0,0)):
         return
-    _start_config()
-    # Spin until configuration complete
-    while not _done_event.signaled:
-        pass
+    _ip_address = data.StationAddress
+    _subnet_mask = data.SubnetMask
+    _routes = [efi.EFI_IP4_ROUTE_TABLE.from_buffer_copy(data.RouteTable[i]) for i in range(data.RouteTableSize)]
+    _initialized = True
+
+def ip4cp_get_configuration(early=False):
+    global _ip4cp, _ip_address, _subnet_mask, _routes, _initialized
     data = efi.EFI_IP4_IPCONFIG_DATA()
     size = efi.UINTN(sizeof(data))
     status = _ip4cp.GetData(_ip4cp, byref(size), byref(data))
     if status == efi.EFI_BUFFER_TOO_SMALL:
         resize(data, size.value)
         status = _ip4cp.GetData(_ip4cp, byref(size), byref(data))
+    if early and status in (efi.EFI_NOT_STARTED, efi.EFI_NOT_READY):
+        return
     efi.check_status(status)
+    if data.StationAddress == efi.EFI_IPv4_ADDRESS((0,0,0,0)):
+        return
     _ip_address = data.StationAddress
     _subnet_mask = data.SubnetMask
     _routes = [efi.EFI_IP4_ROUTE_TABLE.from_buffer_copy(data.RouteTable[i]) for i in range(data.RouteTableSize)]
-    print("IP configuration complete: {}/{}".format(data.StationAddress, data.SubnetMask))
     _initialized = True
+
+def _init_sockets_ip4c2p():
+    global _ip4c2p, _initialized
+    ip4c2p_get_configuration(early=True)
+    if _initialized:
+        return
+    # To trigger DHCP, we need to change the policy to DHCP; if already set to
+    # DHCP, we set it to static and then back to DHCP.
+    data = efi.EFI_IP4_CONFIG2_POLICY()
+    size = efi.UINTN(sizeof(data))
+    efi.check_status(_ip4c2p.GetData(_ip4c2p, efi.Ip4Config2DataTypePolicy, byref(size), byref(data)))
+    if data.value == efi.Ip4Config2PolicyDhcp:
+        data.value = efi.Ip4Config2PolicyStatic
+        efi.check_status(_ip4c2p.SetData(_ip4c2p, efi.Ip4Config2DataTypePolicy, sizeof(data), byref(data)))
+    data.value = efi.Ip4Config2PolicyDhcp
+    status = _ip4c2p.SetData(_ip4c2p, efi.Ip4Config2DataTypePolicy, sizeof(data), byref(data))
+    if status != efi.EFI_NOT_READY:
+        efi.check_status(status)
+    while not _initialized:
+        ip4c2p_get_configuration()
+
+def _ip4cp_stop_config():
+    global _ip4cp
+    efi.check_status(_ip4cp.Stop(_ip4cp))
+
+def _init_sockets_ip4cp():
+    global _ip4cp, _done_event, _reconfig_event, _initialized
+    ip4cp_get_configuration(early=True)
+    if _initialized:
+        return
+    _done_event = efi.event_signal()
+    _reconfig_event = efi.event_signal(abort=_ip4cp_stop_config)
+    efi.check_status(_ip4cp.Start(_ip4cp, _done_event.event, _reconfig_event.event))
+    while not _done_event.signaled:
+        pass
+    ip4cp_get_configuration()
+
+def _init_sockets():
+    global _tcp4sbp, _ip4c2p, _ip4cp, _initialized, _ip_address, _subnet_mask
+    if _initialized:
+        return
+    print("IP configuration started")
+    _tcp4sbp = get_protocol(efi.EFI_TCP4_SERVICE_BINDING_PROTOCOL)
+    _ip4c2p = try_get_protocol(efi.EFI_IP4_CONFIG2_PROTOCOL)
+    if _ip4c2p is not None:
+        _init_sockets_ip4c2p()
+    else:
+        del _ip4c2p
+        _ip4cp = get_protocol(efi.EFI_IP4_CONFIG_PROTOCOL)
+        _init_sockets_ip4cp()
+    while not _initialized:
+        pass
+    print("IP configuration complete: {}/{}".format(_ip_address, _subnet_mask))
 
 _socket_filenos = weakref.WeakValueDictionary()
 
