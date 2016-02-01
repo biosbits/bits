@@ -1028,6 +1028,51 @@ class EFI_MAC_ADDRESS(bits.cdata.Struct):
         ('Addr', UINT8*32),
     ]
 
+EFI_IP4_CONFIG2_DATA_TYPE = UINT32
+(
+    Ip4Config2DataTypeInterfaceInfo,
+    Ip4Config2DataTypePolicy,
+    Ip4Config2DataTypeManualAddress,
+    Ip4Config2DataTypeGateway,
+    Ip4Config2DataTypeDnsServer,
+    Ip4Config2DataTypeMaximum,
+) = range(6)
+
+class EFI_IP4_CONFIG2_INTERFACE_INFO(bits.cdata.Struct):
+    _fields_ = [
+        ('Name', CHAR16 * 32),
+        ('IfType', UINT8),
+        ('HwAddressSize', UINT32),
+        ('HwAddress', EFI_MAC_ADDRESS),
+        ('StationAddress', EFI_IPv4_ADDRESS),
+        ('SubnetMask', EFI_IPv4_ADDRESS),
+        ('RouteTableSize', UINT32),
+        ('RouteTable', POINTER(EFI_IP4_ROUTE_TABLE)),
+    ]
+
+EFI_IP4_CONFIG2_POLICY = UINT32
+(
+    Ip4Config2PolicyStatic,
+    Ip4Config2PolicyDhcp,
+    Ip4Config2PolicyMax,
+) = range(3)
+
+class EFI_IP4_CONFIG2_MANUAL_ADDRESS(bits.cdata.Struct):
+    _fields_ = [
+        ('Address', EFI_IPv4_ADDRESS),
+        ('SubnetMask', EFI_IPv4_ADDRESS),
+    ]
+
+class EFI_IP4_CONFIG2_PROTOCOL(Protocol):
+    guid = EFI_IP4_CONFIG2_PROTOCOL_GUID
+
+EFI_IP4_CONFIG2_PROTOCOL._fields_ = [
+    ('SetData', FUNC(POINTER(EFI_IP4_CONFIG2_PROTOCOL), EFI_IP4_CONFIG2_DATA_TYPE, UINTN, c_void_p)),
+    ('GetData', FUNC(POINTER(EFI_IP4_CONFIG2_PROTOCOL), EFI_IP4_CONFIG2_DATA_TYPE, POINTER(UINTN), c_void_p)),
+    ('RegisterDataNotify', FUNC(POINTER(EFI_IP4_CONFIG2_PROTOCOL), EFI_IP4_CONFIG2_DATA_TYPE, EFI_EVENT)),
+    ('UnregisterDataNotify', FUNC(POINTER(EFI_IP4_CONFIG2_PROTOCOL), EFI_IP4_CONFIG2_DATA_TYPE, EFI_EVENT)),
+]
+
 class EFI_DNS4_CACHE_ENTRY(bits.cdata.Struct):
     _fields_ = [
         ('HostName', c_wchar_p),
