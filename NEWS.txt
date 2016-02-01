@@ -1,3 +1,23 @@
+bits-2073
+=========
+
+- efi: Support EFI_IP4_CONFIG2_PROTOCOL and associated data structures
+
+- _socket: Use EFI_IP4_CONFIG2_PROTOCOL if available, falling back to
+  EFI_IP4_CONFIG_PROTOCOL
+
+  BIOSes based on current versions of EDK2, including current OVMF, only
+  support EFI_IP4_CONFIG2_PROTOCOL, and drop support for
+  EFI_IP4_CONFIG_PROTOCOL.  Support configuring IPv4 via the newer
+  protocol, falling back to the older protocol for compatibility with
+  existing BIOSes.
+
+  In either case, reuse the existing IPv4 configuration if present, and
+  only kick off DHCP if not already configured.  This also allows systems
+  that require manual IPv4 configuration to perform such configuration
+  (via the EFI shell, the BITS Python interpreter, or any other means) and
+  subsequently use that configuration with BITS.
+
 bits-2070
 =========
 
