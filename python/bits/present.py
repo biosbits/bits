@@ -117,7 +117,7 @@ def load(name="slides", bufsize=1024):
     sizes = list(len(f) for f in slides)
     if set(sizes) != set([info.HorizontalResolution * info.VerticalResolution * sizeof(EFI_GRAPHICS_OUTPUT_BLT_PIXEL)]):
         print("Load error: Inconsistent buffer sizes = {}".format(sizes))
-    readline.add_key_hook(bits.KEY_F10, resume)
+    readline.add_key_hook(bits.input.KEY_F10, resume)
 
 def resume():
     """Start or resume a presentation"""
