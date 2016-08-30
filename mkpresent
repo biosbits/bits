@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# Copyright (c) 2013, Intel Corporation
+# Copyright (c) 2016, Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import Image
+from PIL import Image
 import glob
 import os
 import subprocess
@@ -58,7 +58,7 @@ def main(args):
         except IOError:
             break
         out = open(os.path.join(directory, "{0}z".format(n)), "wb")
-        out.write(zlib.compress(img.tostring("raw", "BGRX"), 9))
+        out.write(zlib.compress(img.tobytes("raw", "BGRX"), 9))
         os.unlink(ppm)
 
 if __name__ == "__main__":
