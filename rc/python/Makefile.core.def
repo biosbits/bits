@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2014, Intel Corporation
+Copyright (c) 2016, Intel Corporation
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 module = {
         name = python;
         cppflags = '-I$(top_srcdir)/contrib/python -I$(srcdir)/contrib-deps/python/Include -D_IEEE_LIBM -D__LITTLE_ENDIAN= -I$(srcdir)/contrib-deps/fdlibm $(CONTRIB_CPPFLAGS) -include contrib/acpica/acenv.h -DGRUB2 -DACPI_LIBRARY -I$(top_srcdir)/contrib/acpica -I$(srcdir)/contrib-deps/acpica/source/include -U__ELF__ -I$(srcdir)/contrib-deps/libffi/include -I$(srcdir)/contrib-deps/libffi/src/x86 -I$(srcdir)/contrib-deps/python/Modules/zlib';
-        cflags = '$(CONTRIB_CFLAGS) -fshort-wchar -maccumulate-outgoing-args -Wno-empty-body -Wno-float-equal -Wno-maybe-uninitialized -Wno-missing-field-initializers -Wno-missing-declarations -Wno-missing-format-attribute -Wno-missing-noreturn -Wno-missing-prototypes -Wno-nested-externs -Wno-old-style-definition -Wno-parentheses -Wno-redundant-decls -Wno-sign-compare -Wno-shadow -Wno-type-limits -Wno-undef -Wno-uninitialized -Wno-unused -Wno-unused-parameter -Wno-unused-value -Wno-unused-variable -Wno-write-strings';
+        cflags = '$(CONTRIB_CFLAGS) -fshort-wchar -maccumulate-outgoing-args -Wno-empty-body -Wno-float-equal -Wno-maybe-uninitialized -Wno-missing-field-initializers -Wno-missing-declarations -Wno-missing-format-attribute -Wno-missing-noreturn -Wno-missing-prototypes -Wno-nested-externs -Wno-old-style-definition -Wno-parentheses -Wno-redundant-decls -Wno-sign-compare -Wno-shadow -Wno-shift-negative-value -Wno-type-limits -Wno-undef -Wno-uninitialized -Wno-unused -Wno-unused-parameter -Wno-unused-value -Wno-unused-variable -Wno-write-strings';
         enable = i386_pc;
         enable = i386_efi;
         enable = x86_64_efi;
