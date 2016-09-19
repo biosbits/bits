@@ -39,7 +39,7 @@ def init():
     pass
 
 def register_tests():
-    testsuite.add_test("MSR consistency test", msr_test)
+    testsuite.add_test("MSR consistency test", msr_test, runall=False)
 
 def msr_test():
     testmsr.rdmsr_consistent(msr_blacklist, msr_masklist)
