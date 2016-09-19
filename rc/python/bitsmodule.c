@@ -271,6 +271,7 @@ static PyObject *bits__putenv(PyObject *self, PyObject *args)
     const char *key, *value;
     if (!PyArg_ParseTuple(args, "ss:putenv", &key, &value))
         return NULL;
+    grub_errno = GRUB_ERR_NONE;
     if (grub_env_set(key, value) != GRUB_ERR_NONE || grub_env_export(key) != GRUB_ERR_NONE)
         return PyErr_SetFromErrno(PyExc_OSError);
     return Py_BuildValue("");
