@@ -1,3 +1,33 @@
+bits-2079
+=========
+
+- On unknown CPUs, don't run the MSR consistency test in the full testsuite
+
+  On unknown CPUs without a CPU-specific MSR blacklist, this test produces
+  too many false positives.  Leave it available to run specifically, but
+  don't run it as part of the full "run all tests" testsuite.
+
+- python: Disable new GCC warning shift-negative-value
+
+  This broke the build with GCC 6.
+
+- os.putenv: Avoid propagating old errors from previous function calls
+
+  grub_env_set propagated the previous (potentially unrelated) grub_errno
+  value, which led to spurious error messages from harmless failures.  For
+  instance, Python searches for modules by attempting to open each
+  possible location, and handles errors by continuing the search; however,
+  a subsequent call to putenv would noisily show that error.  This
+  resulted in a spurious error message about /boot/python/bits/efi.pyc,
+  even though the import call that produced that message went on to open
+  the correct file.
+
+  Clear grub_errno at the start of putenv to prevent this.
+
+- mkpresent: Update to work with current PIL
+
+- bits.present: Fix hotkey for the new input layer
+
 bits-2073
 =========
 
