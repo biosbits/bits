@@ -417,10 +417,10 @@ off_t lseek(int fd, off_t offset, int whence)
 {
     grub_file_t file;
 
-    if (fd >= 0 && fd < 3)
+    if (fd >= 0 && fd < 3) {
         grub_printf("Internal error: Python attempted to seek on stdin, stdout, or stderr.\n");
         return (off_t)-1;
-
+    }
     file = fd_to_file(fd);
     if (!file)
         return (off_t)-1;

@@ -1,20 +1,25 @@
 [submodule "deps/acpica"]
 	path = deps/acpica
-	url = ../acpica
+	url = git@github.com:ani-sinha/bits-acpica.git
+	branch = bits
 	fetchRecurseSubmodules = true
 [submodule "deps/fdlibm"]
 	path = deps/fdlibm
-	url = ../fdlibm
+	url = git@github.com:ani-sinha/bits-fdlibm.git
+	branch = bits
 	fetchRecurseSubmodules = true
 [submodule "deps/grub"]
 	path = deps/grub
-	url = ../grub
+	url = git@github.com:ani-sinha/bits-grub.git
+	branch = bits
 	fetchRecurseSubmodules = true
 [submodule "deps/libffi"]
 	path = deps/libffi
-	url = ../libffi
+	url = git@github.com:ani-sinha/bits-libffi.git
+	branch = bits
 	fetchRecurseSubmodules = true
 [submodule "deps/python"]
 	path = deps/python
-	url = ../python
+	url = git@github.com:ani-sinha/bits-python.git
+	branch = bits
 	fetchRecurseSubmodules = true
